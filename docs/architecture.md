@@ -2,15 +2,18 @@
 
 Ce document explique les frontières entre couches et documente les décisions
 structurantes de cette baseline. Il complète, sans le dupliquer, le cahier
-des charges (`ReserveFlash_Incident_Cahier_des_Charges_v1.0.pdf`) et sa
-modification officielle R0.1 "Local-First" (voir
-`docs/adr/0002-local-first-pivot.md`), qui reste la référence contractuelle
-pour ce pivot (section 20.2 - "Décision de baseline").
+des charges (`ReserveFlash_Incident_Cahier_des_Charges_v1.1_LocalFirst.pdf`,
+"RÉFÉRENCE CONTRACTUELLE - REMPLACE V1.0" - SHA-256 vérifié dans
+`docs/SPEC_BASELINE.md`) et le pivot R0.1 "Local-First" qu'il formalise
+(voir `docs/adr/0002-local-first-pivot.md`), qui reste la référence
+contractuelle pour le raisonnement de ce pivot (section 20.2 - "Décision de
+baseline" du cahier v1.1).
 
-**Cette version du document décrit l'architecture R0.1, mise à jour R0.2**
-(le pivot architectural R0.1 est inchangé ; R0.2 restreint uniquement la
-surface API exposée par défaut - voir section 3). Pour l'historique
-R0 -> R0.1 -> R0.2, voir `CHANGELOG.md`.
+**Cette version du document décrit l'architecture R0.1, mise à jour
+R0.2.3** (le pivot architectural R0.1 est inchangé depuis R0.2 ; R0.2.3 ne
+change aucun code métier/architectural, uniquement la documentation et la
+traçabilité - voir section 7 pour le statut à jour des limitations). Pour
+l'historique R0 -> R0.1 -> R0.2 -> R0.2.3, voir `CHANGELOG.md`.
 
 ## 1. Vue d'ensemble
 
@@ -145,21 +148,26 @@ sont documentés séparément dans `docs/local_storage_schema.md` (point 16 de
 la demande corrective - "schéma de stockage local" explicitement requis dans
 la livraison).
 
-## 7. Limitations connues de cette baseline (R0.1)
+## 7. Limitations connues de cette baseline (mise à jour R0.2.3)
 
 Documentées ici pour éviter toute ambiguïté lors de la recette (section 16
-du cahier des charges) :
+du cahier des charges). Les limitations #1 et #6 ci-dessous, actives lors
+des livraisons R0/R0.1/R0.2, sont **résolues depuis R0.2.1/R0.2.2** (preuve
+par exécution réelle - voir `docs/GATE_R0.1_STATUS.md` et `CHANGELOG.md`) et
+conservées ici seulement pour l'historique de la recette :
 
 | # | Limitation | Périmètre prévu pour la résoudre |
 |---|---|---|
-| 1 | Le mobile Flutter n'a pas pu être compilé/analysé/testé dans l'environnement ayant produit cette livraison (SDK Flutter inaccessible en sandbox cloud ET dans la VM isolée du pont vers l'ordinateur de l'utilisateur - voir `mobile/README.md`). La CI (`.github/workflows/ci.yml`, job `mobile`) exécute la checklist complète (`flutter analyze`, `flutter test`, `flutter build apk --debug`) mais n'a pas encore tourné sur un vrai runner au moment de cette livraison. | À exécuter par un développeur équipé, ou au premier push CI - voir CHANGELOG.md pour le statut exact |
+| 1 | ~~Le mobile Flutter n'a pas pu être compilé/analysé/testé~~ **RÉSOLU (R0.2.1, reconfirmé R0.2.2)** : `flutter analyze` 0 erreur/0 info, 52/52 tests passés, APK debug construit - exécution réelle sur le poste de l'utilisateur. La CI (`.github/workflows/ci.yml`, job `mobile`) a également tourné avec succès sur un vrai runner GitHub Actions (R0.2.2). | Fait |
 | 2 | La duplication Backend/Mobile du Reserve Composer n'est vérifiée identique que par lecture humaine des deux suites de tests (mêmes scénarios E2E-01 à E2E-07, mêmes cas adversariaux) - pas encore par un corpus de vecteurs de test partagé rejouable automatiquement des deux côtés. | ROADMAP, voir ADR 0002 |
 | 3 | `generate_export`/l'écran S13 produisent un document placeholder, pas encore un vrai PDF avec mise en page, chronologie et preuves intégrées. | R3 - Composer & dossier |
 | 4 | Le pipeline IA réel (OpenAI) n'est pas implémenté : `build_ai_provider` lève `NotImplementedError` si `RESERVEFLASH_AI_PROVIDER=openai`. Seul le mock déterministe existe (branché aux deux routes `/v1/ai/*`). | R2 - IA extraction |
 | 5 | Aucun rule pack n'est actif (comportement voulu, pas une limitation - voir section 11.3 et `rulepacks/README.md`). | N/A - conforme au cahier des charges |
-| 6 | `LocalIncidentRepository` n'a pas de test d'intégration exécuté (nécessite le SDK Flutter/`sqlite3_flutter_libs`, voir limitation #1) - seule une vérification structurelle (imports, conventions de nommage Drift) a pu être faite. | Idem limitation #1 |
+| 6 | ~~`LocalIncidentRepository` n'a pas de test d'intégration exécuté~~ **RÉSOLU (R0.2.1)** : `mobile/test/data/local_incident_repository_test.dart` exécuté et vert sur une vraie base SQLite fichier (créer→fermer→rouvrir→retrouver). | Fait |
 | 7 | L'écran de restauration de sauvegarde (import) et l'écran d'export ne sont pas encore câblés dans l'UI (`BackupService` existe et est testé structurellement, mais aucun écran S01-S20 ne l'appelle encore). | R1/R3 - à cabler avec les écrans de compte/historique |
 | 8 | Le backend conserve `app/infrastructure/db/models.py` + Alembic (schéma PostgreSQL complet, testé contre un vrai PostgreSQL) comme chemin optionnel/futur, non branché au runtime - voir section 3 ci-dessus. | Post-V1, si un besoin cloud est confirmé |
+| 9 | **iOS - réserve future explicite, non bloquante pour R0** : jamais construit ni testé (nécessite un poste macOS/Xcode, indisponible dans ce contexte). Android est entièrement prouvé par exécution réelle. | À prouver par un développeur équipé macOS avant toute release iOS |
+| 10 | Le backup export/import n'est pas encore chiffré (intégrité SHA-256 + refus d'archive corrompue faits en R0.2 ; chiffrement pas fait) - voir `docs/security.md` SEC-09. Ne pas déclarer conforme R4. | R4 - Backup & intégrité |
 
 ## 8. Ce qui N'A PAS changé depuis R0 (pour éviter toute confusion)
 

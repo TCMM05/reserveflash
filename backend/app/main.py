@@ -33,9 +33,10 @@ def create_app() -> FastAPI:
         title="ReserveFlash Incident API",
         version="0.1.0",
         description=(
-            "API backend de ReserveFlash Incident (cahier des charges v1.0 + "
-            "modification corrective R0.1 Local-First, voir "
-            "docs/adr/0002-local-first-pivot.md). "
+            "API backend de ReserveFlash Incident (cahier des charges v1.1 "
+            "Local-First - REFERENCE CONTRACTUELLE, remplace v1.0 - voir "
+            "docs/SPEC_BASELINE.md pour le SHA-256 verifie et "
+            "docs/adr/0002-local-first-pivot.md pour l'historique du pivot). "
             f"Environnement: {settings.environment}. "
             "Le rôle primaire de cette API est app/api/routes/ai.py (proxy "
             "IA sans état). app/api/routes/incidents.py est un chemin "

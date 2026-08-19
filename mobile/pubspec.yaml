@@ -1,8 +1,8 @@
 name: reserveflash
 description: >
   ReserveFlash Incident - application mobile de constat de réception (cahier
-  des charges v1.0). Stack de référence section 5.1 : Flutter/Dart,
-  Riverpod, go_router, Drift, Dio.
+  des charges v1.1 Local-First). Stack de référence section 5.1 :
+  Flutter/Dart, Riverpod, go_router, Drift, Dio.
 publish_to: "none"
 version: 0.1.0+1
 

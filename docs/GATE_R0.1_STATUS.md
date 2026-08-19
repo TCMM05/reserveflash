@@ -6,6 +6,21 @@ terminés/incomplets demandée au point 16 de cette même demande. Statut
 honnête : un critère marqué ✅ est appuyé par un test automatisé exécuté
 dans cette session ; un critère marqué ⏳ ne l'est pas et dit pourquoi.
 
+## Mise à jour R0.2.3 (statut final - freeze documentaire/traçabilité)
+
+Cette section fait foi sur le statut final ; les sections suivantes
+("Mise à jour R0.2.1", "Mise à jour R0.2") sont conservées pour l'historique
+détaillé de chaque preuve, mais certaines de leurs mentions ponctuelles
+("CI non exécutée", "iOS/v1.1 en attente") sont désormais obsolètes et
+corrigées ci-dessous.
+
+| Sujet | Statut final |
+|---|---|
+| **CI GitHub Actions réelle** | ✅ **PASS** - run #2 vert, 4/4 jobs (`backend` 44s, `secret-scan` 6s, `build-staging` 25s, `mobile` 7m33s), 7m36s au total, sur `TCMM05/reserveflash`, commit `6aa7f88`. Le tout premier run (commit `cf2d17c`) avait révélé un vrai bug de packaging Python (`backend/pyproject.toml` sans `[build-system]`), corrigé et reconfirmé vert - voir `CHANGELOG.md`. |
+| **Baseline cahier des charges v1.1** | ✅ **VÉRIFIÉE** - fichier reçu dans la conversation (2026-08-19), SHA-256 recalculé indépendamment (`sha256sum`) et confirmé identique à la valeur citée par l'équipe (`1c6b3db672d9d622679ecd6c8b20908e575e2702eeb4dcc839609b21ea5ccd1b`). 33 pages lues intégralement ; chaque clause citée dans les retours de recette a désormais une référence exacte (section/page) dans `docs/SPEC_BASELINE.md`. |
+| **Android** | ✅ **PASS** - `flutter analyze` 0 erreur/0 info, 52/52 tests passés, `flutter build apk --debug` réussi, reconfirmé par une seconde exécution réelle indépendante (R0.2.2) après les correctifs de style. |
+| **iOS** | 🟡 **Réserve future explicite, non bloquante pour la clôture de R0** - jamais construit ni testé (poste macOS/Xcode indisponible dans ce contexte). Ne bloque pas le Gate R0 (Android + backend entièrement prouvés), mais doit être démontré par un développeur équipé macOS avant toute release iOS. |
+
 ## Mise à jour R0.2.1 (preuve par exécution réelle obtenue)
 
 La limitation qui bloquait 6 des 11 points R0.2 ci-dessous ("SDK Flutter
@@ -78,8 +93,8 @@ détail complet). État honnête de ces 11 points à l'issue de cette session :
 
 | # | Demande | Statut |
 |---|---|---|
-| 1 | Basculer sur le cahier v1.1 + marqueur `SPEC_BASELINE` | 🟠 Marqueur créé (`docs/SPEC_BASELINE.md`), MAIS aucun document v1.1 n'a été trouvé dans les emplacements accessibles (uploads conversation, dossier connecté) - voir ce document pour la demande explicite de le fournir si un tel fichier existe réellement. |
-| 2 | Livrer `android/` + `ios/` | 🟠 Android : prouvé par exécution réelle - `flutter create . --platforms=android,ios` régénère `android/` de façon reproductible (vérifié plusieurs fois de suite), complété par 2 fichiers Gradle committés portant un vrai correctif (`mobile/android/build.gradle.kts`, `mobile/android/app/build.gradle.kts` - voir R0.2.1 ci-dessus) ; l'APK résultant compile et s'exécute. iOS : **non prouvé** - jamais construit, nécessite un poste macOS/Xcode indisponible ici. |
+| 1 | Basculer sur le cahier v1.1 + marqueur `SPEC_BASELINE` | ✅ **Fait et vérifié (R0.2.2)** - le fichier v1.1 a été fourni dans la conversation, SHA-256 recalculé indépendamment et confirmé identique à la valeur citée par l'équipe ; `docs/SPEC_BASELINE.md` mis à jour avec `SPEC_BASELINE`/`SPEC_DATE`/`SPEC_SHA256` réels et les citations exactes (section/page) de chaque clause. |
+| 2 | Livrer `android/` + `ios/` | 🟡 Android : ✅ **prouvé par exécution réelle** - `flutter create . --platforms=android,ios` régénère `android/` de façon reproductible (vérifié plusieurs fois de suite), complété par 2 fichiers Gradle committés portant un vrai correctif (`mobile/android/build.gradle.kts`, `mobile/android/app/build.gradle.kts` - voir R0.2.1 ci-dessus) ; l'APK résultant compile et s'exécute, reconfirmé par la CI GitHub Actions réelle (R0.2.2). iOS : **réserve future explicite, non bloquante** - jamais construit, nécessite un poste macOS/Xcode indisponible ici. |
 | 3 | Générer `app_database.g.dart` | ✅ Prouvé par exécution réelle - `dart run build_runner build --delete-conflicting-outputs` a tourné avec succès sur le poste de l'utilisateur ("Built with build_runner/aot in 17s; wrote 99 outputs"), après correction d'une collision de nom colonne/méthode Drift qui, avant correctif, invalidait silencieusement toute la génération (voir CHANGELOG.md). |
 | 4 | `flutter analyze` vert | ✅ Prouvé par exécution réelle - 0 erreur (14 `info` de style uniquement : `const` manquants, `withOpacity` déprécié - aucun des deux ne bloque la compilation). |
 | 5 | `flutter test` vert | ✅ Prouvé par exécution réelle - 52/52 tests passés (`All tests passed!`), sur la suite complète ET sur la suite Drift dédiée (point 6) exécutée séparément en priorité comme demandé. |
@@ -90,19 +105,18 @@ détail complet). État honnête de ces 11 points à l'issue de cette session :
 | 10 | Ne plus monter `/v1/incidents/*` par défaut | ✅ Fait et testé (`backend/app/config.py::enable_legacy_cloud_incident_api`, défaut `False` ; `backend/tests/api/test_legacy_api_disabled_by_default.py`, 4 tests verts ; `backend/openapi.json` régénéré, surface minimale confirmée : `/health`, `/v1/config`, `/v1/ai/transcribe`, `/v1/ai/extract`). |
 | 11 | Ne pas présenter le Backup comme conforme R4 | ✅ Fait - `docs/security.md` (SEC-09) et la docstring de `BackupService` déclarent explicitement le format non chiffré (`BackupResult.isEncrypted => false`) ; vérification d'intégrité SHA-256 par pièce AVANT toute mutation locale (`db.transaction`) ajoutée pour la partie "hashes + refus d'archive corrompue" de R4, sans déclarer le chiffrement fait. |
 
-**Bilan R0.2 (mis à jour après R0.2.1)** : 9/11 points pleinement faits et
-vérifiés par exécution réelle (3, 4, 5, 6, 7, 8, 9, 10, 11), 1/11 partiel (2
-- Android prouvé, iOS non prouvé faute de poste macOS), 1/11 toujours
-partiel pour une raison indépendante du SDK Flutter (1 - document v1.1
-jamais fourni). Les 6 points bloqués par l'indisponibilité du SDK dans les
-sessions R0.1/R0.2 (2 à 8) sont donc désormais débloqués et prouvés, à
-l'exception d'iOS.
+**Bilan R0.2 (mis à jour après R0.2.3)** : 10/11 points pleinement faits et
+vérifiés par exécution réelle (1, 3, 4, 5, 6, 7, 8, 9, 10, 11), 1/11 partiel
+(2 - Android prouvé y compris par la CI réelle, iOS reste une réserve
+future non bloquante faute de poste macOS). Tous les points initialement
+bloqués (SDK Flutter indisponible en R0.1/R0.2, document v1.1 non fourni)
+sont désormais débloqués et prouvés, à l'exception d'iOS.
 
 ## Les 11 critères du Gate
 
 | # | Critère | Statut | Preuve |
 |---|---|---|---|
-| 1 | Application Flutter compilable | ✅ PROUVÉ PAR EXÉCUTION RÉELLE | `flutter build apk --debug` a réussi sur le poste réel de l'utilisateur ("Built build\app\outputs\flutter-apk\app-debug.apk") après 8 vagues de correctifs (voir CHANGELOG.md et la mise à jour R0.2.1 ci-dessus pour le détail et les SHA de preuve). La CI GitHub Actions elle-même reste, en revanche, toujours non exécutée sur un vrai runner (pas de push vers GitHub effectué depuis ce bac à sable) - ce critère est validé par exécution locale directe, pas par la CI. |
+| 1 | Application Flutter compilable | ✅ PROUVÉ PAR EXÉCUTION RÉELLE | `flutter build apk --debug` a réussi sur le poste réel de l'utilisateur ("Built build\app\outputs\flutter-apk\app-debug.apk") après 8 vagues de correctifs (voir CHANGELOG.md et la mise à jour R0.2.1 ci-dessus pour le détail et les SHA de preuve). **Reconfirmé par la CI GitHub Actions elle-même depuis R0.2.2** (run #2 vert, job `mobile`, 7m33s, sur un vrai runner GitHub - voir "Mise à jour R0.2.3" en tête de ce document) : ce critère est donc validé à la fois par exécution locale directe ET par la CI. |
 | 2 | Création d'incident sans Internet | ✅ Conforme, vérifié par test | `LocalIncidentRepository.createIncident` n'effectue aucun appel réseau (aucun import `dio`/`http`) ; désormais aussi couvert par les 3 tests d'intégration Drift réels (point 6), tous exécutés et verts. |
 | 3 | Persistance après fermeture/réouverture | ✅ Conforme, vérifié par test réel | Prouvé par exécution réelle, pas seulement par construction : `mobile/test/data/local_incident_repository_test.dart` ferme une vraie connexion SQLite puis en rouvre une toute nouvelle sur le même fichier disque, et retrouve l'incident exact - test vert. |
 | 4 | Photos conservées localement | ✅ Conforme par construction | `LocalEvidenceAssets` + fichiers dans l'espace privé de l'app (voir docs/local_storage_schema.md) ; `registerEvidenceAsset` ne fait aucun appel réseau. Le chemin `EvidenceAsset` est couvert par le 2ème test d'intégration Drift (point 6), exécuté et vert. |
@@ -114,16 +128,14 @@ l'exception d'iOS.
 | 10 | Tests automatisés verts | ✅ Fait, des deux côtés | Backend : 80 tests passent, 3 skip (DB), 0 échec, `ruff check` propre. Mobile : **52/52 tests passés** (`All tests passed!`), exécution réelle sur le poste de l'utilisateur, suite Drift dédiée (point 6) comprise. |
 | 11 | Aucune dépendance à PostgreSQL pour utiliser la V1 | ✅ Conforme, vérifié par test | `tests/api/test_postgres_not_required.py` (3 tests, tous verts) démarre l'app et appelle `/v1/ai/transcribe` avec une URL PostgreSQL injoignable - succès. |
 
-**Bilan (mis à jour après R0.2.1)** : les 11 critères sont désormais validés
-par un test automatisé RÉELLEMENT EXÉCUTÉ (backend ET mobile), à
-l'exception de la CI GitHub Actions elle-même (jamais déclenchée sur un
-vrai runner, faute de push vers un dépôt GitHub réel depuis ce bac à
-sable - voir critère 1) et du build iOS (jamais tenté, nécessite un poste
-macOS/Xcode). **Le Gate R0.1 est donc validé par l'exécution réelle
-obtenue dans cette session pour tout le périmètre Android + backend** ;
-il reste formellement deux réserves explicites (CI GitHub non déclenchée,
-iOS non construit) que le Product Owner devra trancher comme faisant
-partie ou non du périmètre de validation R0.
+**Bilan (mis à jour après R0.2.3)** : les 11 critères sont désormais validés
+par un test automatisé RÉELLEMENT EXÉCUTÉ (backend ET mobile), **ET
+reconfirmés par un run CI GitHub Actions réel et vert** (4/4 jobs, voir
+"Mise à jour R0.2.3" en tête de ce document) - la seule réserve qui subsiste
+est le build iOS (jamais tenté, nécessite un poste macOS/Xcode). **Le Gate
+R0.1 est donc validé pour tout le périmètre Android + backend + CI** ; iOS
+reste une réserve future explicite et non bloquante, à démontrer avant
+toute release iOS.
 
 ## Éléments terminés (point 16)
 
@@ -148,9 +160,16 @@ partie ou non du périmètre de validation R0.
 - Documentation : ADR 0002, `docs/local_storage_schema.md`, mise à jour de
   `docs/architecture.md`, `docs/security.md` (section minimisation IA, point
   14), `README.md`, `CHANGELOG.md`, ce document.
-- CI : étape `flutter build apk --debug` ajoutée et validée syntaxiquement
-  (YAML parsé avec succès), non encore exécutée sur un runner réel (voir
-  ci-dessous - reste incomplet, distinct de l'exécution locale réussie).
+- CI : étape `flutter build apk --debug` ajoutée, ET **exécutée avec succès
+  sur un vrai runner GitHub Actions depuis R0.2.2** (run #2 vert, 4/4 jobs -
+  voir "Mise à jour R0.2.3" en tête de ce document et CHANGELOG.md).
+- Backend : bug de packaging Python découvert et corrigé par cette même
+  exécution CI réelle (`backend/pyproject.toml` sans `[build-system]`,
+  invisible en local car les tests passent par `pytest` sans jamais
+  installer le paquet) - voir CHANGELOG.md, section R0.2.3.
+- Documentation : cahier des charges v1.1 Local-First reçu et vérifié
+  (SHA-256 indépendant, lecture intégrale des 33 pages), `SPEC_BASELINE.md`
+  mis à jour en conséquence (R0.2.2).
 
 ## Éléments incomplets / non vérifiés (point 16)
 
@@ -167,10 +186,6 @@ partie ou non du périmètre de validation R0.
 - **Corpus de vecteurs de test partagé** entre les deux implémentations du
   Reserve Composer (backend/mobile) - ROADMAP documentée dans ADR 0002, pas
   fait dans cette livraison.
-- **Exécution réelle de la CI GitHub Actions** - le fichier est présent et
-  syntaxiquement valide (vérifié par un parseur YAML), mais n'a pas tourné
-  sur un vrai runner depuis ce bac à sable (pas de push vers un dépôt GitHub
-  réel effectué).
 - **Provider OpenAI réel** (`openai_provider.py`) - toujours non implémenté,
   inchangé depuis R0, prévu R2 (hors scope R0.1).
 - **PDF avec mise en page réelle** - toujours un placeholder texte, inchangé

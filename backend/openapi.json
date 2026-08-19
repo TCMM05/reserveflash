@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ReserveFlash Incident API",
-    "description": "API backend de ReserveFlash Incident (cahier des charges v1.0 + modification corrective R0.1 Local-First, voir docs/adr/0002-local-first-pivot.md). Environnement: development. Le rôle primaire de cette API est app/api/routes/ai.py (proxy IA sans état). app/api/routes/incidents.py est un chemin optionnel/futur (usage cloud), non requis pour l'app mobile V1, et non monté par défaut depuis R0.2 (enable_legacy_cloud_incident_api=False).",
+    "description": "API backend de ReserveFlash Incident (cahier des charges v1.1 Local-First - REFERENCE CONTRACTUELLE, remplace v1.0 - voir docs/SPEC_BASELINE.md pour le SHA-256 verifie et docs/adr/0002-local-first-pivot.md pour l'historique du pivot). Environnement: development. Le rôle primaire de cette API est app/api/routes/ai.py (proxy IA sans état). app/api/routes/incidents.py est un chemin optionnel/futur (usage cloud), non requis pour l'app mobile V1, et non monté par défaut depuis R0.2 (enable_legacy_cloud_incident_api=False).",
     "version": "0.1.0"
   },
   "paths": {

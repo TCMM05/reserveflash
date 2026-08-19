@@ -23,7 +23,7 @@ include = ["app*"]
 [project]
 name = "reserveflash-backend"
 version = "0.1.0"
-description = "ReserveFlash Incident - backend FastAPI (section 5, 9 du cahier des charges v1.0)"
+description = "ReserveFlash Incident - backend FastAPI (section 5, 9 du cahier des charges v1.1 Local-First)"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115,<0.116",

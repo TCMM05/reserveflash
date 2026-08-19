@@ -2,6 +2,48 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.1.5] - R0.2.3 Freeze documentaire/traçabilité - 2026-08-19
+
+R0.2.2 étant techniquement validée (CI GitHub Actions réelle et verte,
+cahier v1.1 vérifié), cette version clôt la traçabilité documentaire finale
+de R0, **sans aucun changement métier ou architectural** :
+
+1. **Références actives v1.0 -> v1.1 Local-First** : `README.md`,
+   `docs/architecture.md` (nom de fichier du cahier cité),
+   `backend/pyproject.toml`, `backend/app/main.py` (description FastAPI),
+   `mobile/pubspec.yaml`. Les mentions historiques légitimes (ADR 0002,
+   qui documente une décision datée du 2026-08-18 quand seul le cahier
+   v1.0 était connu ; `docs/SPEC_BASELINE.md`, qui archive le SHA-256 v1.0
+   à des fins de traçabilité) sont volontairement laissées inchangées.
+2. **`backend/openapi.json` régénéré** après la modification de la
+   description FastAPI ci-dessus - seul le champ `info.description`
+   change dans le diff, confirmé stable (même SHA-256 sur deux générations
+   consécutives) dans un environnement Python 3.12 propre.
+3. **`docs/GATE_R0.1_STATUS.md` au statut final** : nouvelle section "Mise
+   à jour R0.2.3" en tête de document (CI GitHub réelle = PASS, baseline
+   v1.1 = vérifiée, Android = PASS, iOS = réserve future explicite non
+   bloquante), et toutes les mentions ponctuelles contradictoires dans les
+   sections historiques ("CI jamais déclenchée", "v1.1 jamais fourni")
+   corrigées pour ne plus se contredire avec ce statut final.
+4. **Phrase obsolète retirée du CHANGELOG** : la section "Explicitement PAS
+   fait dans cette clôture" de `[0.1.4]` affirmant que la CI n'avait pas
+   été exécutée a été supprimée - elle était directement contredite par le
+   paragraphe qui la précédait (run CI #2 vert, documenté juste au-dessus).
+5. **`README.md`/`docs/architecture.md` nettoyés** des limitations R0
+   désormais résolues : "mobile non compilé/testé" et "test d'intégration
+   Drift non exécuté" (toutes deux résolues depuis R0.2.1/R0.2.2, barrées
+   et marquées RÉSOLU plutôt que supprimées, pour garder la trace de la
+   recette). Les réserves toujours réelles (iOS, backup non chiffré) sont
+   conservées telles quelles.
+6. **Commit final + tag final R0** : voir `git log`/`git tag -n1` pour le
+   commit et le tag exacts de cette clôture (volontairement non figés en
+   dur ici, même raison que dans `docs/GATE_R0.1_STATUS.md` - ce document
+   fait partie de l'historique qu'il décrirait).
+7. **Poussé sur GitHub** (`TCMM05/reserveflash`, historique + tags complets
+   via `git bundle`, comme pour R0.2.2).
+8. **CI relancée sur ce commit exact** - voir la section suivante pour le
+   résultat.
+
 ## [0.1.4] - R0.2.2 Clôture documentaire/build (revue équipe post-R0.2.1) - 2026-08-19
 
 Réponse à la revue de l'équipe sur R0.2.1 (verdict "R0.2.1 : PASS
@@ -142,13 +184,6 @@ verte sur un vrai runner GitHub Actions** - le dernier point resté ouvert
 de la revue R0.2.2 est donc clos, avec la même exigence de preuve par
 exécution que le reste du projet (le bug ci-dessus n'aurait justement
 jamais été détecté sans cette exécution réelle).
-
-### Explicitement PAS fait dans cette clôture (honnêteté du statut)
-
-- **Exécution réelle de la CI GitHub Actions** : ce bac à sable n'est pas
-  connecté à un dépôt GitHub distant, aucun push n'a été effectué. Le
-  fichier YAML est valide et aligné sur Flutter 3.47.0, mais son
-  exécution verte sur un vrai runner reste à démontrer.
 
 ## [0.1.3] - R0.2.1 Hotfix (première exécution réelle) - 2026-08-19
 
