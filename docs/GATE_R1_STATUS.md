@@ -1,21 +1,26 @@
 # Statut Gate R1 - "Capture Offline"
 
-**Statut : CORRECTION EN COURS DE VÉRIFICATION - PAS ENCORE RE-CONFIRMÉE PAR
-EXÉCUTION RÉELLE.** La recette terrain indépendante a trouvé un défaut réel
-lors du parcours manuel décrit plus bas : les photos et la note vocale
-capturées n'étaient pas consultables/écoutables depuis l'app une fois
-enregistrées. Voir la section "Correction ciblée post-recette terrain
-(photo/audio)" ci-dessous pour le détail complet. **Ce correctif a été
-écrit mais n'a PAS encore été vérifié par un `flutter analyze`/`flutter
-test`/`flutter build apk` réel, ni par un nouveau passage sur appareil** -
-exactement la même rigueur que le reste de R1 initial (voir la section
-"Exécution réelle" plus bas) reste à appliquer avant de considérer ce
-correctif comme un nouveau candidat sérieux. Le tag `r1-candidate` existant
-correspond au commit D'AVANT ce correctif - **ne pas le considérer comme
-à jour tant que le correctif n'a pas été vérifié par une exécution réelle.**
-Conformément à la demande corrective ("ne pas déclarer R1 PASS vous-même :
-livrer les preuves et laisser la recette indépendante décider"), **aucune
-section de ce document n'affirme que le Gate R1 est validé.**
+**Statut : CORRECTION VÉRIFIÉE PAR EXÉCUTION RÉELLE SUR LE POSTE DE
+L'UTILISATEUR (`flutter analyze`/`flutter test`/`flutter build apk
+--debug` tous verts) - CI ET NOUVELLE RECETTE TERRAIN SUR APPAREIL RESTENT
+À FAIRE AVANT TOUT NOUVEAU TAG.** La recette terrain indépendante avait
+trouvé un défaut réel lors du parcours manuel décrit plus bas : les photos
+et la note vocale capturées n'étaient pas consultables/écoutables depuis
+l'app une fois enregistrées. Voir la section "Correction ciblée post-
+recette terrain (photo/audio)" ci-dessous pour le détail complet, y compris
+plusieurs bugs réels (tests, pas fonctionnalité) trouvés et corrigés
+uniquement grâce à cette exécution réelle - exactement la même rigueur que
+le reste de R1 initial (voir la section "Exécution réelle" plus bas). Le
+tag `r1-candidate` existant correspond au commit D'AVANT ce correctif -
+**ne pas le considérer comme à jour.** Il reste : (1) pousser ce commit et
+confirmer la CI GitHub Actions verte dessus, (2) une nouvelle recette
+terrain manuelle sur appareil ciblée spécifiquement sur le correctif
+photo/audio - la recette indépendante précédente (parcours métier/offline)
+**ne couvre PAS encore ce correctif**, confirmé explicitement par
+l'utilisateur. Conformément à la demande corrective ("ne pas déclarer R1
+PASS vous-même : livrer les preuves et laisser la recette indépendante
+décider"), **aucune section de ce document n'affirme que le Gate R1 est
+validé.**
 
 ## Rappel du Gate R1 (critère d'acceptation, verbatim de la demande)
 
@@ -191,7 +196,7 @@ compromettre caméra, fichiers et persistance."*
   persistance restent intacts par construction - ce sont des chemins de
   code indépendants).
 
-## Correction ciblée post-recette terrain (photo/audio) - PAS ENCORE vérifiée
+## Correction ciblée post-recette terrain (photo/audio) - vérifiée par exécution réelle (poste utilisateur)
 
 La recette terrain indépendante, en déroulant le parcours réel sur le
 Samsung Galaxy A51 (voir section ci-dessus), a signalé : *"une fois les
@@ -234,9 +239,7 @@ demandé) :
   apk --debug` réel.**
 
 **Tests ajoutés** (`mobile/test/features/evidence_viewer_test.dart`) -
-**écrits mais PAS ENCORE exécutés pour de vrai** (aucun `flutter test`
-réel n'a pu être lancé dans cet environnement de développement, même
-limitation que d'habitude - voir `mobile/README.md`) :
+**exécutés réellement sur le poste de l'utilisateur, tous verts** :
 
 - formatage `mm:ss` (fonction pure, testée directement).
 - photo disponible → tap sur la vignette ouvre bien la visionneuse plein
@@ -253,14 +256,45 @@ limitation que d'habitude - voir `mobile/README.md`) :
   suppression) reste **manuel requis sur un vrai appareil**, à vérifier
   lors de la prochaine recette terrain.
 
-**Prochaine étape indispensable avant tout nouveau tag** : sur le poste de
-l'utilisateur, dans `reserveflash-git` - `flutter pub get` (vérifier que
-`just_audio` se résout et se construit sans conflit), `flutter analyze`,
-`flutter test` (dont le nouveau fichier ci-dessus), `flutter build apk
---debug`, puis réinstaller l'APK et reconfirmer manuellement sur un vrai
-téléphone : ouverture plein écran d'une photo, lecture/pause d'une note
-vocale, suppression/reprise, mode avion. Comme pour R1 initial, aucun
-verdict PASS ne sera déclaré ici avant cette exécution réelle.
+**Exécution réelle obtenue (poste Windows de l'utilisateur)** :
+
+- **`flutter analyze`** : **0 erreur, 0 info.** (Un bug réel trouvé et
+  corrigé au premier passage : `evidence_viewer_test.dart` important
+  seulement `evidence_asset.dart as domain` sans importer séparément
+  `incident.dart as domain`, qui définit la classe `Incident` -
+  `undefined_class` sur les 4 usages. Corrigé par l'ajout de l'import
+  manquant, même convention que le reste du projet.)
+- **`flutter test`** : **67/67 tests verts**, y compris les 6 tests du
+  nouveau fichier `evidence_viewer_test.dart`, et zéro régression sur les
+  61 tests R0/R1 déjà verts. Deux bugs réels trouvés et corrigés
+  uniquement grâce à cette exécution réelle (aucun n'aurait été détecté
+  par simple relecture de code) :
+  - Les tests impliquant `Image.file` (photo réelle sur disque) restaient
+    bloqués indéfiniment : à l'intérieur d'un `testWidgets()`, tout appel
+    dart:io réellement asynchrone doit être exécuté via
+    `tester.runAsync()` - y compris AVANT le premier `pumpWidget`, ce que
+    la documentation officielle ne précise pas explicitement pour ce cas.
+    Diagnostiqué par une trace disque synchrone (indépendante du testeur)
+    qui a localisé précisément l'opération bloquante.
+  - Le test de suppression restait bloqué (`pumpAndSettle timed out`) : un
+    aller-retour unique `runAsync`/`pumpAndSettle` de 50ms ne suffisait
+    pas pour une suppression réelle (fichier + base) déclenchée depuis
+    l'écran lui-même. Corrigé par une boucle de plusieurs petits
+    aller-retours temps réel/temps simulé, plus robuste qu'un délai fixe.
+- **`flutter build apk --debug`** : **réussi.** `just_audio: ^0.10.6` (le
+  seul nouveau plugin natif de ce correctif, point de risque le plus élevé
+  identifié à l'avance) s'intègre sans erreur au toolchain du projet
+  (Gradle 9.3.1/AGP 9.x) - le risque documenté ne s'est pas matérialisé,
+  même constat que pour `record` en R1 initial.
+
+**Reste à faire avant tout nouveau tag** : (1) pousser ce commit vers
+GitHub et confirmer la CI verte dessus (même preuve à deux environnements
+indépendants que pour R1 initial) ; (2) réinstaller l'APK et reconfirmer
+manuellement sur un vrai téléphone : ouverture plein écran d'une photo,
+lecture/pause d'une note vocale, suppression/reprise, mode avion. Comme
+pour R1 initial, aucun verdict PASS n'est déclaré ici avant cette dernière
+étape - la recette terrain indépendante précédente ne couvre pas ce
+correctif (confirmé explicitement).
 
 ## Tests obligatoires R1 - statut
 
@@ -313,15 +347,14 @@ la recette indépendante (voir section suivante).
 5. La décision PASS/FAIL du Gate R1 revient à la recette indépendante, pas
    à ce document ni à son auteur - ce document se limite à livrer les
    preuves ci-dessus.
-6. **EN COURS** - Correction ciblée post-recette terrain (visionneuse
-   photo + lecteur audio, voir section dédiée ci-dessus) : écrite, PAS
-   ENCORE vérifiée par exécution réelle. Reste à faire, sur le poste de
-   l'utilisateur : `flutter pub get`/`flutter analyze`/`flutter test`
-   (dont `evidence_viewer_test.dart`)/`flutter build apk --debug`, corriger
-   les éventuels bugs réels révélés (même méthode qu'à chaque bootstrap
-   précédent de ce projet), puis une nouvelle recette terrain manuelle
-   ciblée sur : ouverture plein écran d'une photo, lecture/pause d'une
-   note vocale, suppression/reprise, mode avion. Ce n'est qu'une fois cette
-   nouvelle exécution réelle confirmée que la livraison complète (ZIP, APK,
-   SHA-256, captures d'écran, `CHANGELOG.md`, ce document) et un nouveau
-   tag pourront être préparés.
+6. ~~Correction ciblée post-recette terrain (visionneuse photo + lecteur
+   audio)~~ **BOOTSTRAP RÉEL FAIT** sur le poste de l'utilisateur :
+   `flutter analyze` (0/0), `flutter test` (67/67), `flutter build apk
+   --debug` (réussi) - voir section dédiée ci-dessus pour le détail des
+   bugs réels trouvés et corrigés au passage. **Reste à faire** : pousser
+   ce commit et confirmer la CI GitHub Actions verte dessus, puis une
+   nouvelle recette terrain manuelle ciblée sur : ouverture plein écran
+   d'une photo, lecture/pause d'une note vocale, suppression/reprise, mode
+   avion. Ce n'est qu'une fois cette recette terrain confirmée que la
+   livraison complète (ZIP, APK, SHA-256, captures d'écran, `CHANGELOG.md`,
+   ce document) et un nouveau tag pourront être préparés.

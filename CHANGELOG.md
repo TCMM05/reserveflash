@@ -4,10 +4,13 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
 ## [0.2.1] - R1 correction ciblée post-recette terrain (photo/audio) - 2026-08-19
 
-**Écrit mais PAS ENCORE vérifié par exécution réelle** (`flutter analyze`/
-`flutter test`/`flutter build apk`) - voir `docs/GATE_R1_STATUS.md`,
-section "Correction ciblée post-recette terrain (photo/audio)", pour le
-détail complet et l'état précis de vérification.
+**Vérifié par exécution réelle sur le poste de l'utilisateur** :
+`flutter analyze` (0/0), `flutter test` (67/67), `flutter build apk
+--debug` (réussi) - voir `docs/GATE_R1_STATUS.md`, section "Correction
+ciblée post-recette terrain (photo/audio)", pour le détail complet
+(y compris les bugs réels de test trouvés et corrigés au passage). CI et
+nouvelle recette terrain sur appareil restent à faire avant tout nouveau
+tag.
 
 Origine : la recette terrain indépendante, en déroulant le parcours réel
 sur un Samsung Galaxy A51, a signalé qu'une fois les photos et la note
@@ -60,12 +63,21 @@ Local-First ou backend, comme demandé) :
    test` pur - `EvidenceAudioPlayerScreen` reste "manuel requis" sur un
    vrai appareil pour son comportement complet (voir
    `docs/GATE_R1_STATUS.md`).
+8. **Bugs réels trouvés et corrigés par le bootstrap réel** (aucun n'aurait
+   été détecté par simple relecture de code) : import manquant de la
+   classe `Incident` dans le nouveau fichier de test (`flutter analyze`) ;
+   tests `Image.file` restés bloqués indéfiniment (dart:io réellement
+   asynchrone dans `testWidgets()` nécessite `tester.runAsync()`, y compris
+   avant le premier `pumpWidget` - diagnostiqué par une trace disque
+   synchrone) ; test de suppression bloqué (`pumpAndSettle timed out`,
+   corrigé par plusieurs petits aller-retours temps réel/temps simulé au
+   lieu d'un délai fixe unique). Détail complet dans l'historique git de ce
+   correctif.
 
-**Prochaine étape indispensable** : bootstrap réel complet sur le poste de
-l'utilisateur (`flutter pub get`/`flutter analyze`/`flutter test`/
-`flutter build apk --debug`), correction des éventuels bugs réels révélés,
-puis nouvelle recette terrain manuelle avant tout nouveau tag - **cette
-entrée ne déclare PAS ce correctif validé.**
+**Reste à faire avant tout nouveau tag** : pousser ce commit et confirmer
+la CI GitHub Actions verte dessus, puis nouvelle recette terrain manuelle
+sur appareil ciblée sur ce correctif (la recette indépendante précédente ne
+le couvre pas) - **cette entrée ne déclare PAS ce correctif validé.**
 
 ## [0.2.0] - R1 "Capture Offline" (candidate) - 2026-08-19
 
