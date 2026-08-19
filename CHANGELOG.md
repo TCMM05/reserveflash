@@ -2,6 +2,135 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.2.0] - R1 "Capture Offline" (candidate) - 2026-08-19
+
+Développée en partant strictement de la baseline gelée `r0-final` (voir
+`docs/GATE_R0.1_STATUS.md`). Objectif R1 (demande corrective) : "permettre à
+un utilisateur, sans connexion Internet, de créer un incident réel de
+livraison et de conserver durablement toutes les preuves sur son téléphone."
+
+**Conformément à la demande, cette version n'est PAS déclarée PASS ici** -
+voir `docs/GATE_R1_STATUS.md` pour les preuves livrées et la recette
+indépendante à mener. Aucune fonctionnalité R2 n'a été développée.
+
+### Architecture / persistance
+
+1. **`IncidentRepository`** (interface) : 3 nouvelles méthodes -
+   `updateIncidentMetadata` (correction des champs saisis, point 7),
+   `deleteEvidenceAsset` et `deleteIncident` (suppression avec confirmation
+   côté UI, cascade transactionnelle pour l'incident - issues, faits
+   candidats/confirmés, réserve(s), preuves, opérations IA). Les deux
+   méthodes de suppression ne touchent QUE les métadonnées Drift ; les
+   fichiers binaires sont supprimés séparément par l'appelant via le
+   nouveau service ci-dessous (frontière stricte préservée).
+2. **`lib/data/local/evidence_storage.dart`** (nouveau) : couche d'I/O
+   fichier dédiée aux preuves - écriture ATOMIQUE (fichier temporaire même
+   répertoire puis `rename`, jamais un fichier final partiel visible),
+   calcul SHA-256 à la capture, suppression de fichier, et **vérification
+   d'intégrité réelle** (`missing` si absent, `corrupted` si le hash
+   recalculé diffère). `documentsDirectoryProvider` injectable uniquement
+   pour les tests (voir plus bas), `path_provider` réel par défaut.
+3. **`LocalIncidentRepository.verifyEvidenceAssetsIntegrity`** : n'est plus
+   un stub (retournait simplement `listEvidenceAssets` depuis R0.1) -
+   relit maintenant chaque fichier via `EvidenceStorageService.verify` et
+   met à jour `availabilityStatus` en base si l'état a changé.
+4. **`lib/core/providers/app_providers.dart`** (nouveau) : premier câblage
+   Riverpod réel du projet (`ProviderScope` n'avait aucun override jusqu'ici)
+   - `AppDatabase` (Drift/SQLite réel via `path_provider` +
+   `NativeDatabase.createInBackground`, jamais `.memory()`),
+   `IncidentRepository`, `EvidenceStorageService`, et des `FutureProvider`
+   de lecture (liste/détail/issues/preuves) invalidés explicitement après
+   chaque mutation locale via `notifyDataChanged`.
+
+### Navigation
+
+5. **`SplashScreen`** : corrigé - cet écran n'avait AUCUNE navigation avant
+   R1 (l'app ne pouvait jamais atteindre l'accueil par elle-même). Navigue
+   maintenant directement vers `AppRoutes.home`, sans jamais passer par
+   `auth` ni requérir de réseau.
+6. **`app_router.dart`** : `incidentId` transmis via `extra` à chaque étape
+   du parcours de capture (S06-S15), pour que chaque écran sache sur quel
+   dossier écrire - absent avant R1 (aucun écran, hors détail, ne recevait
+   d'identifiant).
+
+### Écrans (remplacement des stubs par une logique réelle)
+
+7. **`CreateIncidentScreen`** (S05) : n'utilise plus de données fictives -
+   ajoute les champs référence BL/commentaire (manquants), et "Continuer"
+   crée réellement l'incident en local (R1-T01) avant toute navigation.
+8. **`DocumentCaptureScreen`** (S06) : caméra réelle (plugin `camera`,
+   permission demandée au point d'usage), preuve `delivery_document`
+   enregistrée (id, incident, type, date/heure, chemin, taille, SHA-256)
+   AVANT toute autre opération. Aucun OCR/IA.
+9. **`IssueTypeScreen`** (S08) : sélection multiple réelle des 7 catégories
+   V1, persistée via `addIssue` (plusieurs anomalies par incident).
+10. **`EvidenceCaptureScreen`** (S09) : capture guidée (Photo 1 vue
+    générale, Photo 2 étiquette/référence, Photo 3 vue rapprochée du
+    dommage, photos supplémentaires facultatives), suppression avec
+    confirmation par photo, compteur de progression.
+11. **`VoiceDescriptionScreen`** (S10) : saisie texte toujours disponible
+    (sortie de secours) + note vocale locale au mieux-effort via `record`
+    (voir section "Risque documenté" ci-dessous). Aucune transcription IA.
+12. **`ChecklistScreen`** (S14) : complétude de la CAPTURE (document BL,
+    type(s) de problème, ≥3 photos preuves) en vert/orange, actionnable.
+13. **`DossierCompleteScreen`** (S15) : confirme la sauvegarde 100% locale ;
+    export PDF/partage restent hors périmètre R1 (voir demande corrective).
+14. **`IncidentDetailScreen`** (S17) : réel - informations, type(s) de
+    problème, photos BL/preuves, note texte/audio ; correction des
+    métadonnées, suppression de photo/incident avec confirmation
+    explicite, reprise d'un dossier commencé précédemment. Revérifie
+    l'intégrité disque de chaque preuve à chaque ouverture (R1-T07).
+15. **`HomeScreen`** / **`HistoryScreen`** : listes réelles
+    (`listIncidents()`), plus de texte fictif "Aucun incident" figé.
+
+### Dépendances
+
+16. **`record: ^7.1.1`** ré-ajouté (retiré temporairement en R0.2, voir
+    entrée `[0.1.3]`) - utilisé UNIQUEMENT par `VoiceDescriptionScreen`, en
+    best-effort complet (try/catch, jamais bloquant). Version choisie après
+    recherche (changelog pub.dev) pour son alignement AGP 9.x/Kotlin Gradle
+    DSL avec le toolchain déjà prouvé de ce projet - **seul ajout de plugin
+    natif de ce lot, donc le point de risque le plus élevé, à vérifier en
+    priorité lors du premier `flutter build apk --debug` réel**.
+17. **Aucun sélecteur de galerie** (`image_picker`) : décision de périmètre
+    volontaire pour minimiser le risque d'un nouveau plugin natif
+    supplémentaire non testable localement - "prise photo caméra" (exigée)
+    est couverte, "choix image existante" (`si pertinent`) est différé.
+
+### Tests
+
+18. **`mobile/test/data/r1_capture_offline_test.dart`** (nouveau) : couvre
+    R1-T01, T02, T03, T04, T05, T07, T08 par exécution réelle (vraie base
+    SQLite sur fichier temporaire + vrais fichiers sur disque, jamais de
+    mock mémoire) - mêmes garanties de preuve que
+    `local_incident_repository_test.dart` (R0). R1-T10 (aucun appel réseau)
+    est garanti par construction (aucune dépendance HTTP dans le chemin de
+    code exercé) et documenté comme tel en tête du fichier. R1-T06 (refus
+    de permission) et R1-T09 (mode avion) nécessitent un vrai canal de
+    plateforme - à vérifier manuellement sur appareil (voir
+    `docs/GATE_R1_STATUS.md`).
+19. Tous les tests R0 existants sont conservés inchangés (non-régression).
+
+### Limitations connues / simplifications assumées (R1)
+
+- Les libellés "Photo 1/2/3" de la capture guidée sont déterminés par
+  ORDRE de capture, pas par un champ stocké (`LocalEvidenceAssets` n'a pas
+  de colonne dédiée) - purement un affichage, sans conséquence sur
+  l'intégrité des preuves elles-mêmes.
+- `HistoryScreen` : liste complète sans recherche/filtres avancés (mention
+  du critère de conception d'origine S16, hors périmètre fonctionnel R1
+  explicite).
+- Risque audio (`record`) documenté explicitement ci-dessus et dans
+  `docs/GATE_R1_STATUS.md`, conformément à la demande : "si l'intégration
+  audio ajoute un risque important au Gate R1, documenter clairement le
+  point mais ne pas compromettre caméra, fichiers et persistance."
+- Aucune exécution réelle (`flutter analyze`/`flutter test`/
+  `flutter build apk --debug`) n'a encore eu lieu au moment de la rédaction
+  de cette entrée - le SDK Flutter reste indisponible dans ce contexte de
+  développement (même limitation que R0, résolue à chaque fois par un
+  bootstrap réel sur le poste de l'utilisateur, voir `mobile/README.md`).
+  **Ne pas considérer R1 validée avant ce bootstrap réel.**
+
 ## [0.1.5] - R0.2.3 Freeze documentaire/traçabilité - 2026-08-19
 
 R0.2.2 étant techniquement validée (CI GitHub Actions réelle et verte,

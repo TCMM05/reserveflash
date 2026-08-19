@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import 'package:reserveflash/core/design_system/rf_colors.dart';
 import 'package:reserveflash/core/design_system/rf_spacing.dart';
 import 'package:reserveflash/core/design_system/rf_typography.dart';
+import 'package:reserveflash/core/providers/app_providers.dart';
 import 'package:reserveflash/core/router/app_router.dart';
+import 'package:reserveflash/domain/entities/incident.dart' as domain;
 
 /// S04 - Accueil. "CTA 'Nouvelle réception problématique' + derniers
-/// dossiers + état sync" (section 3.2). C'est le seul écran avec CTA
-/// primaire visible en permanence (principe "1 geste = 1 intention",
-/// section 3.1).
-class HomeScreen extends StatelessWidget {
+/// dossiers + état sync" (section 3.2). R1 point 1 : n'utilise plus AUCUNE
+/// donnée fictive - la liste "Derniers dossiers" vient de
+/// `IncidentRepository.listIncidents()` (Drift/SQLite réel).
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<List<domain.Incident>> incidentsAsync = ref.watch(incidentListProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('ReserveFlash'),
@@ -25,18 +31,50 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: const Padding(
-        padding: EdgeInsets.all(RfSpacing.lg),
+      body: Padding(
+        padding: const EdgeInsets.all(RfSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text('Derniers dossiers', style: RfTypography.sectionTitle),
-            SizedBox(height: RfSpacing.sm),
-            Text(
-              'Aucun incident pour le moment.',
-              style: RfTypography.secondary,
+            const Text('Derniers dossiers', style: RfTypography.sectionTitle),
+            const SizedBox(height: RfSpacing.sm),
+            Expanded(
+              child: incidentsAsync.when(
+                data: (List<domain.Incident> incidents) {
+                  if (incidents.isEmpty) {
+                    return const Text(
+                      'Aucun incident pour le moment.',
+                      style: RfTypography.secondary,
+                    );
+                  }
+                  final List<domain.Incident> recent = incidents.take(5).toList();
+                  return ListView.builder(
+                    itemCount: recent.length,
+                    itemBuilder: (BuildContext context, int index) {
+                      final domain.Incident incident = recent[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: RfSpacing.sm),
+                        child: ListTile(
+                          title: Text(
+                            incident.supplierName ?? incident.deliveryRef ?? 'Incident sans nom',
+                          ),
+                          subtitle: Text(
+                            DateFormat('dd/MM/yyyy HH:mm').format(incident.occurredAt.toLocal()),
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.pushIncidentDetail(incident.id),
+                        ),
+                      );
+                    },
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (Object e, StackTrace stackTrace) => Text(
+                  'Lecture locale impossible : $e',
+                  style: const TextStyle(color: RfColors.danger),
+                ),
+              ),
             ),
-            Spacer(),
           ],
         ),
       ),

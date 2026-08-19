@@ -16,6 +16,7 @@ import '../../domain/reserve_composer.dart' as composer;
 import '../../domain/value_objects/incident_status.dart';
 import '../../domain/value_objects/issue_type.dart';
 import 'app_database.dart';
+import 'evidence_storage.dart';
 
 const Uuid _uuid = Uuid();
 
@@ -32,9 +33,18 @@ const Uuid _uuid = Uuid();
 /// classe (voir tests/data/local_incident_repository_test.dart - à écrire
 /// une fois le SDK Flutter disponible, voir mobile/README.md).
 final class LocalIncidentRepository implements IncidentRepository {
-  LocalIncidentRepository(this._db);
+  LocalIncidentRepository(this._db, {EvidenceStorageService evidenceStorage = const EvidenceStorageService()})
+      : _evidenceStorage = evidenceStorage;
 
   final AppDatabase _db;
+
+  // R1 : utilisé UNIQUEMENT par `verifyEvidenceAssetsIntegrity` pour relire
+  // le disque (frontière stricte préservée - ce repository ne fait aucune
+  // écriture binaire lui-même, voir docstring de
+  // `lib/data/local/evidence_storage.dart`). Injectable pour les tests
+  // (fournir un `EvidenceStorageService` custom pointant vers un dossier
+  // temporaire).
+  final EvidenceStorageService _evidenceStorage;
 
   // -- Incidents ------------------------------------------------------
 
@@ -107,6 +117,63 @@ final class LocalIncidentRepository implements IncidentRepository {
     await (_db.update(_db.localIncidents)..where((t) => t.id.equals(incidentId))).write(
       const LocalIncidentsCompanion(archived: Value<bool>(true)),
     );
+  }
+
+  @override
+  Future<domain.Incident> updateIncidentMetadata({
+    required String incidentId,
+    required DateTime occurredAt,
+    String? supplierName,
+    String? carrierName,
+    String? deliveryRef,
+    String? notes,
+  }) async {
+    await (_db.update(_db.localIncidents)..where((t) => t.id.equals(incidentId))).write(
+      LocalIncidentsCompanion(
+        occurredAt: Value<DateTime>(occurredAt),
+        supplierName: Value<String?>(supplierName),
+        carrierName: Value<String?>(carrierName),
+        deliveryRef: Value<String?>(deliveryRef),
+        notes: Value<String?>(notes),
+      ),
+    );
+    final domain.Incident? updated = await getIncident(incidentId);
+    if (updated == null) {
+      throw StateError('Incident $incidentId introuvable après mise à jour des métadonnées.');
+    }
+    return updated;
+  }
+
+  @override
+  Future<void> deleteIncident(String incidentId) async {
+    // Cascade transactionnelle (point 7) : soit tout disparaît, soit rien -
+    // jamais d'issue/preuve orpheline si l'app est tuée au milieu de la
+    // suppression (même invariant de résilience que le point 9).
+    await _db.transaction(() async {
+      final List<LocalIssue> issues = await (_db.select(_db.localIssues)
+            ..where((t) => t.incidentId.equals(incidentId)))
+          .get();
+      final List<String> issueIds = issues.map((issue) => issue.id).toList();
+
+      if (issueIds.isNotEmpty) {
+        await (_db.delete(_db.localConfirmedFactSets)
+              ..where((t) => t.issueId.isIn(issueIds)))
+            .go();
+        await (_db.delete(_db.localCandidateFactSets)
+              ..where((t) => t.issueId.isIn(issueIds)))
+            .go();
+      }
+      await (_db.delete(_db.localIssues)..where((t) => t.incidentId.equals(incidentId))).go();
+      await (_db.delete(_db.localReserveTexts)..where((t) => t.incidentId.equals(incidentId)))
+          .go();
+      await (_db.delete(_db.localExportBundles)..where((t) => t.incidentId.equals(incidentId)))
+          .go();
+      await (_db.delete(_db.localEvidenceAssets)..where((t) => t.incidentId.equals(incidentId)))
+          .go();
+      await (_db.delete(_db.aiOperationQueue)..where((t) => t.incidentId.equals(incidentId)))
+          .go();
+      await (_db.delete(_db.localIncidents)..where((t) => t.id.equals(incidentId))).go();
+    });
   }
 
   domain.Incident _toDomainIncident(LocalIncident row) {
@@ -401,15 +468,52 @@ final class LocalIncidentRepository implements IncidentRepository {
   }
 
   @override
+  Future<void> deleteEvidenceAsset(String assetId) async {
+    // R1 (point 7) : supprime UNIQUEMENT la métadonnée. Le fichier binaire
+    // doit être supprimé par l'appelant via
+    // `EvidenceStorageService.deleteFile` AVANT cet appel (voir docstring de
+    // l'interface) - jamais l'inverse, pour ne jamais laisser une métadonnée
+    // pointer vers un fichier déjà supprimé en cas d'échec entre les deux
+    // étapes (on préfère un fichier orphelin temporaire à une métadonnée
+    // `available` mensongère).
+    await (_db.delete(_db.localEvidenceAssets)..where((t) => t.id.equals(assetId))).go();
+  }
+
+  @override
   Future<List<domain.EvidenceAsset>> verifyEvidenceAssetsIntegrity(String incidentId) async {
-    // L'implémentation complète (relecture disque + recalcul sha256, voir
-    // package:crypto) vit dans lib/data/local/evidence_storage.dart (couche
-    // I/O, hors périmètre Drift) ; ce repository se contente d'exposer les
-    // métadonnées actuelles pour que ce service puisse comparer avant/après.
-    // ROADMAP R0.1 : brancher evidence_storage.verifyAll() ici une fois le
-    // SDK Flutter disponible pour valider l'implémentation contre un vrai
-    // filesystem (voir mobile/README.md, section "Limitation connue").
-    return listEvidenceAssets(incidentId);
+    // R1 : implémentation réelle (relecture disque + recalcul SHA-256, voir
+    // lib/data/local/evidence_storage.dart) - détecte `missing` (fichier
+    // absent, ex: restauration de sauvegarde incomplète) et `corrupted`
+    // (hash différent de celui enregistré à la capture), point 9/R1-T07.
+    final List<domain.EvidenceAsset> current = await listEvidenceAssets(incidentId);
+    final List<domain.EvidenceAsset> refreshed = <domain.EvidenceAsset>[];
+    for (final domain.EvidenceAsset asset in current) {
+      final EvidenceIntegrityCheck check = await _evidenceStorage.verify(asset);
+      if (check.availabilityStatus == asset.availabilityStatus) {
+        refreshed.add(asset);
+        continue;
+      }
+      await (_db.update(_db.localEvidenceAssets)..where((t) => t.id.equals(asset.id))).write(
+        LocalEvidenceAssetsCompanion(
+          availabilityStatus: Value<String>(_availabilityWireValue(check.availabilityStatus)),
+        ),
+      );
+      refreshed.add(
+        domain.EvidenceAsset(
+          id: asset.id,
+          incidentId: asset.incidentId,
+          issueId: asset.issueId,
+          documentType: asset.documentType,
+          localFilePath: asset.localFilePath,
+          sha256: asset.sha256,
+          mimeType: asset.mimeType,
+          bytes: asset.bytes,
+          capturedAtDevice: asset.capturedAtDevice,
+          availabilityStatus: check.availabilityStatus,
+        ),
+      );
+    }
+    return refreshed;
   }
 
   domain.EvidenceAsset _toDomainEvidenceAsset(LocalEvidenceAsset row) {

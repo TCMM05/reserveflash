@@ -52,6 +52,38 @@ abstract interface class IncidentRepository {
 
   Future<void> archiveIncident(String incidentId);
 
+  /// R1 (point 7 - "corriger métadonnées") : réécrit les champs saisissables
+  /// d'un incident déjà créé. `occurredAt` reste obligatoire (un incident a
+  /// toujours une date/heure) ; les champs optionnels passés à `null`
+  /// EFFACENT explicitement la valeur existante (pas de distinction
+  /// "non fourni" / "remis à vide" - l'écran d'édition renvoie toujours son
+  /// état complet). Aucune suppression silencieuse (point 7) : c'est
+  /// l'appelant (UI) qui doit demander confirmation avant d'appeler cette
+  /// méthode pour un champ effacé, cette méthode elle-même applique
+  /// simplement ce qui lui est demandé.
+  Future<Incident> updateIncidentMetadata({
+    required String incidentId,
+    required DateTime occurredAt,
+    String? supplierName,
+    String? carrierName,
+    String? deliveryRef,
+    String? notes,
+  });
+
+  /// R1 (point 7 - "supprimer un incident avec confirmation explicite") :
+  /// supprime l'incident ET toutes les données qui en dépendent (issues,
+  /// faits candidats/confirmés, réserve(s), preuves, opérations IA en
+  /// attente), dans une seule transaction Drift - jamais d'état partiel.
+  ///
+  /// Ne supprime PAS les fichiers binaires référencés par les
+  /// `EvidenceAsset` de cet incident (photos, audio...) : cette méthode ne
+  /// touche QUE les métadonnées (frontière stricte de dépendance, voir
+  /// docstring de fichier). L'appelant DOIT lister les preuves
+  /// (`listEvidenceAssets`) et supprimer leurs fichiers via
+  /// `lib/data/local/evidence_storage.dart` AVANT d'appeler cette méthode,
+  /// pour ne jamais laisser de fichier orphelin sur le disque de l'appareil.
+  Future<void> deleteIncident(String incidentId);
+
   // -- Issues -----------------------------------------------------------
 
   Future<Issue> addIssue(String incidentId, IssueType issueType);
@@ -103,6 +135,16 @@ abstract interface class IncidentRepository {
   Future<EvidenceAsset> registerEvidenceAsset(EvidenceAsset asset);
 
   Future<List<EvidenceAsset>> listEvidenceAssets(String incidentId);
+
+  /// R1 (point 7 - "supprimer une photo avec confirmation") : supprime
+  /// UNIQUEMENT la ligne de métadonnées `LocalEvidenceAssets`. Comme pour
+  /// `deleteIncident`, le fichier binaire n'est PAS touché ici : l'appelant
+  /// doit d'abord supprimer le fichier via
+  /// `lib/data/local/evidence_storage.dart::EvidenceStorageService.deleteFile`
+  /// (avec le `localFilePath` obtenu via `listEvidenceAssets`), puis appeler
+  /// cette méthode. Ne lève pas si `assetId` est déjà inconnu (suppression
+  /// idempotente).
+  Future<void> deleteEvidenceAsset(String assetId);
 
   /// Recalcule `sha256`/`availabilityStatus` pour chaque preuve de
   /// [incidentId] en relisant le fichier local (détecte une preuve

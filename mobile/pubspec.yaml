@@ -40,19 +40,28 @@ dependencies:
   # (section 8.1).
   camera: ^0.11.0
   permission_handler: ^11.3.1
-  # R0.2 (hotfix decouvert par execution reelle - `flutter build apk
-  # --debug`) : `record: ^5.1.2` retire TEMPORAIREMENT. Le sous-paquet
-  # plateforme resolu `record_linux-0.7.2` n'implemente pas l'interface
-  # `record_platform_interface-1.6.0` (methode `startStream` manquante,
-  # signature de `hasPermission` incompatible) - Dart refuse de compiler le
-  # kernel snapshot de l'app (meme pour un build Android), quel que soit le
-  # fait que Linux ne soit pas une cible de ce projet. Verifie avant retrait
-  # : `record` n'est utilise nulle part dans lib/ (grep, zero resultat) -
-  # feature F06/F07/F11 (capture audio) pas encore implementee. A
-  # ré-ajouter, avec une version recente laissant pub resoudre un jeu
-  # coherent de sous-paquets (ou un `dependency_overrides` explicite), le
-  # jour ou la capture audio est reellement codee - voir CHANGELOG.md.
-  # record: ^5.1.2
+  # R1 (point 5 - "audio/note terrain") : ré-ajouté après avoir été retiré en
+  # R0.2 (voir historique ci-dessous, conservé pour traçabilité). `record`
+  # n'est utilisé QUE par
+  # lib/features/voice_description/presentation/voice_description_screen.dart,
+  # en best-effort (try/catch complet, jamais bloquant pour le reste du
+  # parcours - voir docstring de ce fichier et GATE_R1_STATUS.md pour le
+  # risque documenté explicitement comme demandé). Version choisie après
+  # recherche (pub.dev/packages/record/changelog, R1) : 7.0.0 est passée à
+  # AGP 9.x/Kotlin Gradle DSL (min Flutter 3.44/Dart 3.12), alignée sur le
+  # toolchain déjà prouvé de ce projet (Flutter 3.47.0/Dart 3.13.0/Gradle
+  # 9.3.1, voir CHANGELOG.md R0.2.1) - c'est le changement de dépendance
+  # présentant le risque le plus élevé de ce lot R1 (seul ajout de plugin
+  # natif), à vérifier en priorité lors du premier `flutter build apk
+  # --debug` réel (voir mobile/README.md, section "Bootstrap"). Historique
+  # R0.2 : `record: ^5.1.2` avait dû être retiré TEMPORAIREMENT - le
+  # sous-paquet plateforme résolu `record_linux-0.7.2` n'implémentait pas
+  # l'interface `record_platform_interface-1.6.0` (méthode `startStream`
+  # manquante, signature de `hasPermission` incompatible), empêchant Dart de
+  # compiler le kernel snapshot de l'app (même pour un build Android, car
+  # pub résout le graphe de dépendances complet, tous plugins fédérés
+  # confondus, indépendamment de la plateforme cible réelle).
+  record: ^7.1.1
 
   # Icônes Material Symbols cohérentes (section 4.5).
   material_symbols_icons: ^4.2719.3

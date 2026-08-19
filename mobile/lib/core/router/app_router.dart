@@ -85,7 +85,9 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.documentCapture,
-      builder: (BuildContext context, GoRouterState state) => const DocumentCaptureScreen(),
+      builder: (BuildContext context, GoRouterState state) => DocumentCaptureScreen(
+        incidentId: _extraIncidentId(state),
+      ),
     ),
     GoRoute(
       path: AppRoutes.documentMetadata,
@@ -93,15 +95,21 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.issueType,
-      builder: (BuildContext context, GoRouterState state) => const IssueTypeScreen(),
+      builder: (BuildContext context, GoRouterState state) => IssueTypeScreen(
+        incidentId: _extraIncidentId(state),
+      ),
     ),
     GoRoute(
       path: AppRoutes.evidenceCapture,
-      builder: (BuildContext context, GoRouterState state) => const EvidenceCaptureScreen(),
+      builder: (BuildContext context, GoRouterState state) => EvidenceCaptureScreen(
+        incidentId: _extraIncidentId(state),
+      ),
     ),
     GoRoute(
       path: AppRoutes.voiceDescription,
-      builder: (BuildContext context, GoRouterState state) => const VoiceDescriptionScreen(),
+      builder: (BuildContext context, GoRouterState state) => VoiceDescriptionScreen(
+        incidentId: _extraIncidentId(state),
+      ),
     ),
     GoRoute(
       path: AppRoutes.factsReview,
@@ -117,11 +125,15 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.checklist,
-      builder: (BuildContext context, GoRouterState state) => const ChecklistScreen(),
+      builder: (BuildContext context, GoRouterState state) => ChecklistScreen(
+        incidentId: _extraIncidentId(state),
+      ),
     ),
     GoRoute(
       path: AppRoutes.dossierComplete,
-      builder: (BuildContext context, GoRouterState state) => const DossierCompleteScreen(),
+      builder: (BuildContext context, GoRouterState state) => DossierCompleteScreen(
+        incidentId: _extraIncidentId(state),
+      ),
     ),
     GoRoute(
       path: AppRoutes.history,
@@ -154,21 +166,42 @@ final GoRouter appRouter = GoRouter(
   ],
 );
 
+/// R1 : lit l'`incidentId` transmis via `extra` par les helpers
+/// `AppNavigation` ci-dessous. `extra` (pas un paramètre d'URL) car
+/// `incidentId` n'est pas destiné à être un deep link stable pendant le
+/// parcours de capture en cours (contrairement à `AppRoutes.incidentDetail`,
+/// qui lui reste un chemin `:incidentId`, voir plus haut) - simple
+/// transport inter-écrans d'un dossier en cours de constitution. Retourne
+/// `''` si absent (ne doit normalement jamais arriver dans le parcours
+/// nominal S05->S15, chaque écran R1 affiche une erreur contrôlée plutôt que
+/// de planter si c'est le cas - voir chaque écran concerné).
+String _extraIncidentId(GoRouterState state) {
+  final Object? extra = state.extra;
+  return extra is String ? extra : '';
+}
+
 /// Helpers de navigation - centralisent les `context.push(...)` pour éviter
 /// de disperser des chemins littéraux dans les écrans (section 3.3 -
-/// parcours nominal à 7 étapes).
+/// parcours nominal à 7 étapes). R1 : `incidentId` est désormais transmis à
+/// chaque étape du parcours de capture via `extra` (voir `_extraIncidentId`
+/// ci-dessus), pour que chaque écran (BL, type de problème, preuves,
+/// description, checklist, dossier terminé) sache sur quel incident écrire.
 extension AppNavigation on BuildContext {
   void pushCreateIncident() => push(AppRoutes.createIncident);
-  void pushDocumentCapture() => push(AppRoutes.documentCapture);
+  void pushDocumentCapture(String incidentId) =>
+      push(AppRoutes.documentCapture, extra: incidentId);
   void pushDocumentMetadata() => push(AppRoutes.documentMetadata);
-  void pushIssueType() => push(AppRoutes.issueType);
-  void pushEvidenceCapture() => push(AppRoutes.evidenceCapture);
-  void pushVoiceDescription() => push(AppRoutes.voiceDescription);
+  void pushIssueType(String incidentId) => push(AppRoutes.issueType, extra: incidentId);
+  void pushEvidenceCapture(String incidentId) =>
+      push(AppRoutes.evidenceCapture, extra: incidentId);
+  void pushVoiceDescription(String incidentId) =>
+      push(AppRoutes.voiceDescription, extra: incidentId);
   void pushFactsReview() => push(AppRoutes.factsReview);
   void pushReserve() => push(AppRoutes.reserve);
   void pushFinalDocument() => push(AppRoutes.finalDocument);
-  void pushChecklist() => push(AppRoutes.checklist);
-  void pushDossierComplete() => push(AppRoutes.dossierComplete);
+  void pushChecklist(String incidentId) => push(AppRoutes.checklist, extra: incidentId);
+  void pushDossierComplete(String incidentId) =>
+      push(AppRoutes.dossierComplete, extra: incidentId);
   void pushHistory() => push(AppRoutes.history);
   void pushIncidentDetail(String incidentId) =>
       push('/incidents/$incidentId');
