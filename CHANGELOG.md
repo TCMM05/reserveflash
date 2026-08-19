@@ -39,10 +39,9 @@ sans nouveau chantier architectural, sur 8 points précis.
      `const` ajouté sur `Card`/`Text` (les deux champs affichés,
      `_sampleReserveText`/`_prudenceMention`, sont déjà des
      `static const String`).
-   - **Non encore reconfirmé par une nouvelle exécution réelle** au moment
-     de ce commit (voir `docs/DELIVERY_MANIFEST_R0.2.2.md`) - à vérifier
-     par le prochain `flutter analyze` sur le poste de l'utilisateur avant
-     de considérer ce point acquis, conformément au principe de ce projet.
+   - **Reconfirmé par une nouvelle exécution réelle le 2026-08-19** (voir
+     section "Reconfirmation par exécution réelle" ci-dessous) :
+     `flutter analyze` -> `No issues found! (ran in 13.9s)`.
 4. **APK transmis** pour vérification indépendante du SHA-256 annoncé en
    R0.2.1 - **limitation découverte à cette occasion** : le fichier
    (175,3 MiB) dépasse la limite de taille des pièces jointes de cette
@@ -71,6 +70,33 @@ sans nouveau chantier architectural, sur 8 points précis.
    sauvegarde SEC-08 (p.20), formulation du Gate de sortie R0 (section 18,
    p.29), exigences R4 intégrité/hashes/refus d'archive corrompue
    (sections 8.2 et 18, p.17-18 et p.29).
+
+### Reconfirmation par exécution réelle (2026-08-19, rebuild post-commit `f4106b2`)
+
+Nouveau bootstrap complet relancé par l'utilisateur sur son poste Windows
+après le commit documentaire du cahier v1.1 (aucun changement de code
+mobile depuis) - `bootstrap_log.txt` relu intégralement (décodé, comme les
+fois précédentes, depuis un mélange UTF-8/UTF-16LE produit par PowerShell) :
+
+- `flutter analyze` -> **`No issues found! (ran in 13.9s)`** - confirme
+  bien les 5 correctifs `const`/`withValues` du point 3 ci-dessus.
+- Tests -> **52/52 verts** (`All tests passed!`), y compris les tests
+  Drift de persistance disque réelle et les tests `liability_guard`/
+  `reserve_composer`.
+- `flutter build apk --debug` -> APK reconstruit avec succès,
+  `183 865 201` octets (taille identique à l'APK R0.2.1).
+- **Constat honnête, non demandé mais découvert par cette ré-exécution** :
+  le SHA-1 de ce nouvel APK (`1ddb0ade10198eb0e8d8232e6be14c7a350f1809`) est
+  **différent** de celui de l'APK R0.2.1 (`7826ade1fc3267e34ff60ddf683c7affe8387fbf`)
+  alors que la taille est identique et qu'aucun code mobile n'a changé
+  entre les deux builds. Ceci indique que le build APK debug (signé avec
+  le keystore de debug, horodatage/metadata de signature embarqués) n'est
+  **pas reproductible bit-à-bit** d'une exécution à l'autre sur ce poste -
+  à distinguer de "build reproductible" au sens du Gate R0 du cahier v1.1
+  (section 18, page 29), qui porte sur la capacité à reconstruire un build
+  qui fonctionne et passe les tests, non sur une identité binaire stricte
+  (non exigée explicitement ailleurs dans le cahier). Consigné ici par
+  souci de transparence plutôt que passé sous silence.
 
 ### Explicitement PAS fait dans cette clôture (honnêteté du statut)
 

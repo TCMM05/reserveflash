@@ -66,13 +66,23 @@ l'exécution qui a produit l'APK ci-dessus : 2026-08-19T14:59:43+02:00).
 
 ## `flutter analyze`
 
-0 erreur, et désormais 0 `info` visé (14 corrigés dans cette clôture :
-`const` manquants + `withOpacity` déprécié → `withValues`) - **ce résultat
-n'a PAS encore été reconfirmé par une nouvelle exécution réelle** au
-moment de la rédaction de ce manifeste ; à vérifier par le prochain
-`flutter analyze` sur le poste de l'utilisateur avant de le considérer
-comme prouvé, conformément au principe "preuve par exécution" de ce
-projet.
+0 erreur, 0 `info` (14 corrigés dans cette clôture : `const` manquants +
+`withOpacity` déprécié → `withValues`) - **reconfirmé par une nouvelle
+exécution réelle le 2026-08-19** (`No issues found! (ran in 13.9s)`), sur
+un rebuild complet après le commit `f4106b2` (aucun changement de code
+mobile depuis ce point). 52/52 tests toujours verts sur ce même run. Voir
+CHANGELOG.md, section "Reconfirmation par exécution réelle".
+
+**Constat annexe découvert par ce rebuild** : l'APK debug reconstruit fait
+la même taille (183 865 201 octets) que celui de R0.2.1, mais un SHA-1
+différent (`1ddb0ade10198eb0e8d8232e6be14c7a350f1809` contre
+`7826ade1fc3267e34ff60ddf683c7affe8387fbf`) - le build APK debug signé
+n'est pas reproductible bit-à-bit d'une exécution à l'autre sur ce poste
+(métadonnées de signature/horodatage), même à code source strictement
+identique. Voir CHANGELOG.md pour le détail et la distinction avec le
+critère "build reproductible" du Gate R0 (section 18 du cahier v1.1, qui
+porte sur un build qui fonctionne et passe les tests, pas sur une identité
+binaire).
 
 ## Cahier des charges de référence
 
