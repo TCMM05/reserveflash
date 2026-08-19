@@ -1,26 +1,26 @@
 # Statut Gate R1 - "Capture Offline"
 
-**Statut : CORRECTION VÉRIFIÉE PAR EXÉCUTION RÉELLE SUR LE POSTE DE
-L'UTILISATEUR (`flutter analyze`/`flutter test`/`flutter build apk
---debug` tous verts) - CI ET NOUVELLE RECETTE TERRAIN SUR APPAREIL RESTENT
-À FAIRE AVANT TOUT NOUVEAU TAG.** La recette terrain indépendante avait
-trouvé un défaut réel lors du parcours manuel décrit plus bas : les photos
-et la note vocale capturées n'étaient pas consultables/écoutables depuis
-l'app une fois enregistrées. Voir la section "Correction ciblée post-
-recette terrain (photo/audio)" ci-dessous pour le détail complet, y compris
-plusieurs bugs réels (tests, pas fonctionnalité) trouvés et corrigés
-uniquement grâce à cette exécution réelle - exactement la même rigueur que
-le reste de R1 initial (voir la section "Exécution réelle" plus bas). Le
-tag `r1-candidate` existant correspond au commit D'AVANT ce correctif -
-**ne pas le considérer comme à jour.** Il reste : (1) pousser ce commit et
-confirmer la CI GitHub Actions verte dessus, (2) une nouvelle recette
-terrain manuelle sur appareil ciblée spécifiquement sur le correctif
-photo/audio - la recette indépendante précédente (parcours métier/offline)
-**ne couvre PAS encore ce correctif**, confirmé explicitement par
-l'utilisateur. Conformément à la demande corrective ("ne pas déclarer R1
-PASS vous-même : livrer les preuves et laisser la recette indépendante
-décider"), **aucune section de ce document n'affirme que le Gate R1 est
-validé.**
+**Statut : CORRECTION VÉRIFIÉE PAR EXÉCUTION RÉELLE SUR DEUX ENVIRONNEMENTS
+INDÉPENDANTS** (poste Windows de l'utilisateur : `flutter analyze`/
+`flutter test`/`flutter build apk --debug` tous verts ; CI GitHub Actions,
+run #8, commit `a6d0b34` : 4 jobs verts, 7m54s) **- IL NE RESTE QU'UNE
+NOUVELLE RECETTE TERRAIN MANUELLE SUR APPAREIL AVANT TOUT NOUVEAU TAG.** La
+recette terrain indépendante avait trouvé un défaut réel lors du parcours
+manuel décrit plus bas : les photos et la note vocale capturées n'étaient
+pas consultables/écoutables depuis l'app une fois enregistrées. Voir la
+section "Correction ciblée post-recette terrain (photo/audio)" ci-dessous
+pour le détail complet, y compris plusieurs bugs réels (tests, pas
+fonctionnalité) trouvés et corrigés uniquement grâce à cette exécution
+réelle - exactement la même rigueur que le reste de R1 initial (voir la
+section "Exécution réelle" plus bas). Le tag `r1-candidate` existant
+correspond au commit D'AVANT ce correctif - **ne pas le considérer comme
+à jour.** Il reste : une nouvelle recette terrain manuelle sur appareil
+ciblée spécifiquement sur le correctif photo/audio - la recette
+indépendante précédente (parcours métier/offline) **ne couvre PAS encore
+ce correctif**, confirmé explicitement par l'utilisateur. Conformément à
+la demande corrective ("ne pas déclarer R1 PASS vous-même : livrer les
+preuves et laisser la recette indépendante décider"), **aucune section de
+ce document n'affirme que le Gate R1 est validé.**
 
 ## Rappel du Gate R1 (critère d'acceptation, verbatim de la demande)
 
@@ -287,14 +287,19 @@ demandé) :
   (Gradle 9.3.1/AGP 9.x) - le risque documenté ne s'est pas matérialisé,
   même constat que pour `record` en R1 initial.
 
-**Reste à faire avant tout nouveau tag** : (1) pousser ce commit vers
-GitHub et confirmer la CI verte dessus (même preuve à deux environnements
-indépendants que pour R1 initial) ; (2) réinstaller l'APK et reconfirmer
-manuellement sur un vrai téléphone : ouverture plein écran d'une photo,
-lecture/pause d'une note vocale, suppression/reprise, mode avion. Comme
-pour R1 initial, aucun verdict PASS n'est déclaré ici avant cette dernière
-étape - la recette terrain indépendante précédente ne couvre pas ce
-correctif (confirmé explicitement).
+**CI GitHub Actions** : ~~à confirmer~~ **FAIT** - run #8, commit
+`a6d0b34` ("docs(R1): consigner la vérification réelle du correctif
+photo/audio"), 4 jobs verts (Backend, Mobile analyze/test/build debug,
+Secret scan, Build staging image), 7m54s. Deuxième environnement
+indépendant confirmé (runner GitHub Ubuntu propre), même preuve à deux
+environnements que pour R1 initial.
+
+**Reste à faire avant tout nouveau tag** : réinstaller l'APK et
+reconfirmer manuellement sur un vrai téléphone : ouverture plein écran
+d'une photo, lecture/pause d'une note vocale, suppression/reprise, mode
+avion. Comme pour R1 initial, aucun verdict PASS n'est déclaré ici avant
+cette dernière étape - la recette terrain indépendante précédente ne
+couvre pas ce correctif (confirmé explicitement).
 
 ## Tests obligatoires R1 - statut
 
@@ -348,11 +353,11 @@ la recette indépendante (voir section suivante).
    à ce document ni à son auteur - ce document se limite à livrer les
    preuves ci-dessus.
 6. ~~Correction ciblée post-recette terrain (visionneuse photo + lecteur
-   audio)~~ **BOOTSTRAP RÉEL FAIT** sur le poste de l'utilisateur :
-   `flutter analyze` (0/0), `flutter test` (67/67), `flutter build apk
-   --debug` (réussi) - voir section dédiée ci-dessus pour le détail des
-   bugs réels trouvés et corrigés au passage. **Reste à faire** : pousser
-   ce commit et confirmer la CI GitHub Actions verte dessus, puis une
+   audio)~~ **BOOTSTRAP RÉEL + CI FAITS** : `flutter analyze` (0/0),
+   `flutter test` (67/67), `flutter build apk --debug` (réussi) sur le
+   poste de l'utilisateur, ET CI GitHub Actions verte (run #8, commit
+   `a6d0b34`, 4 jobs, 7m54s) - voir section dédiée ci-dessus pour le détail
+   des bugs réels trouvés et corrigés au passage. **Reste à faire** : une
    nouvelle recette terrain manuelle ciblée sur : ouverture plein écran
    d'une photo, lecture/pause d'une note vocale, suppression/reprise, mode
    avion. Ce n'est qu'une fois cette recette terrain confirmée que la
