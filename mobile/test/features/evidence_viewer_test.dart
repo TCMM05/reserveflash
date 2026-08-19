@@ -230,15 +230,52 @@ void main() {
         ..writeAsBytesSync(_validPngBytes, flush: true);
       logStep('FIN   ecriture fichier photo source');
 
-      logStep('DEBUT storage.captureFromFile');
-      final domain.EvidenceAsset asset = await storage.captureFromFile(
+      // Diagnostic v3 : v2 a localisé le blocage précisément DANS
+      // `storage.captureFromFile` (dernier log : "DEBUT storage.
+      // captureFromFile", jamais de "FIN") - AVANT tout pumpWidget, donc
+      // rien à voir avec Image.file/pumpAndSettle/runAsync (hypothèses v1/
+      // v2 réfutées). Comme cette même méthode est utilisée avec succès des
+      // dizaines de fois dans test/data/r1_capture_offline_test.dart (déjà
+      // vert), le problème n'est pas la méthode elle-même mais PEUT-ÊTRE une
+      // étape précise de son corps dans ce contexte précis. On reproduit ici
+      // son corps exact (voir lib/data/local/evidence_storage.dart) avec un
+      // `logStep` avant/après chaque opération disque, pour isoler l'étape
+      // fautive au lieu de traiter la méthode comme une boîte noire.
+      logStep('DEBUT source.exists()');
+      final bool sourceExists = await source.exists();
+      logStep('FIN   source.exists() = $sourceExists');
+
+      logStep('DEBUT source.readAsBytes()');
+      final List<int> rawBytes = await source.readAsBytes();
+      logStep('FIN   source.readAsBytes() (${rawBytes.length} octets)');
+
+      logStep('DEBUT storage.evidenceDirectoryFor');
+      final Directory evDir = await storage.evidenceDirectoryFor(incident.id);
+      logStep('FIN   storage.evidenceDirectoryFor -> ${evDir.path}');
+
+      const String diagId = 'diag-test-asset-1';
+      final String finalPath = '${evDir.path}/$diagId.png';
+      final File tempFile = File('$finalPath.tmp');
+
+      logStep('DEBUT tempFile.writeAsBytes');
+      await tempFile.writeAsBytes(rawBytes, flush: true);
+      logStep('FIN   tempFile.writeAsBytes');
+
+      logStep('DEBUT tempFile.rename');
+      await tempFile.rename(finalPath);
+      logStep('FIN   tempFile.rename');
+
+      final domain.EvidenceAsset asset = domain.EvidenceAsset(
+        id: diagId,
         incidentId: incident.id,
-        sourcePath: source.path,
         documentType: domain.EvidenceDocumentType.photo,
+        localFilePath: finalPath,
+        sha256: 'diagnostic-sha-placeholder',
         mimeType: 'image/png',
-        extension: 'png',
+        bytes: rawBytes.length,
+        capturedAtDevice: DateTime.now().toUtc(),
       );
-      logStep('FIN   storage.captureFromFile');
+      logStep('FIN   construction EvidenceAsset manuelle');
 
       logStep('DEBUT repository.registerEvidenceAsset');
       await repository.registerEvidenceAsset(asset);
