@@ -4,6 +4,21 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
 ## [0.1.3] - R0.2.1 Hotfix (première exécution réelle) - 2026-08-19
 
+### Livraison finale de cette version
+
+- Tag Git : `r0.2.1-hotfix-preuve-execution`.
+- Archive : `ReserveFlash_R0.2.1_Hotfix.zip`, générée par `git archive`
+  depuis ce tag (contenu strictement identique à l'historique Git, aucune
+  dérive possible entre l'archive livrée et le code committé).
+  SHA-256 : `1147994981558dea49b961b6032dd8cf977b1dee69d5035f88798a6efec8c1f3`
+- APK debug Android construit sur le poste réel de l'utilisateur :
+  `app-debug.apk`, 183 865 201 octets.
+  SHA-256 : `08fe8ac120e38befaf7cc9bb753b63ff8d86308f674490ead639ca9e2077ada7`
+  SHA-1 (généré par Gradle) : `7826ade1fc3267e34ff60ddf683c7affe8387fbf`
+- Voir `docs/GATE_R0.1_STATUS.md` pour l'évaluation point par point, mise à
+  jour, des 11 critères du Gate R0.1 et des 11 points de clôture R0.2 à la
+  lumière de cette exécution réelle.
+
 Premiers correctifs issus d'une VRAIE exécution de `flutter create` /
 `flutter pub get` / `dart run build_runner build` sur un poste équipé du SDK
 Flutter (3.47.0, Dart 3.13.0) - exactement ce que le retour de recette
