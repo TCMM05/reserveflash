@@ -12,7 +12,16 @@ on:
 
 env:
   PYTHON_VERSION: "3.12"
-  FLUTTER_VERSION: "3.24.5"
+  # R0.2.2 (aligne sur l'environnement REELLEMENT prouve par execution -
+  # voir CHANGELOG.md "R0.2.1 Hotfix" et docs/GATE_R0.1_STATUS.md) : cette
+  # valeur etait auparavant 3.24.5, jamais executee ni prouvee dans ce
+  # depot - le build reel qui a produit 52/52 tests verts et l'APK debug
+  # a tourne sous Flutter 3.47.0 / Dart 3.13.0 (confirme par
+  # `flutter --version` dans le log d'execution reelle). Une CI sur une
+  # version differente de celle prouvee ne serait pas reproductible au
+  # sens strict - elle pourrait echouer ou reussir pour des raisons
+  # totalement independantes du code.
+  FLUTTER_VERSION: "3.47.0"
 
 jobs:
   backend:

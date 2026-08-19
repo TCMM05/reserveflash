@@ -33,14 +33,14 @@ class ReserveScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Card(
+            const Card(
               child: Padding(
-                padding: const EdgeInsets.all(RfSpacing.md),
+                padding: EdgeInsets.all(RfSpacing.md),
                 child: SelectableText(_sampleReserveText, style: RfTypography.body),
               ),
             ),
             const SizedBox(height: RfSpacing.sm),
-            Text(_prudenceMention, style: RfTypography.secondary),
+            const Text(_prudenceMention, style: RfTypography.secondary),
             const SizedBox(height: RfSpacing.md),
             Row(
               children: <Widget>[

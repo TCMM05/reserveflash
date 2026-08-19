@@ -2,6 +2,80 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.1.4] - R0.2.2 Clôture documentaire/build (revue équipe post-R0.2.1) - 2026-08-19
+
+Réponse à la revue de l'équipe sur R0.2.1 (verdict "R0.2.1 : PASS
+TECHNIQUE Android + backend / Gate R0 global : PASS SOUS RÉSERVES de
+livraison/traçabilité"), qui demandait une clôture documentaire/build
+sans nouveau chantier architectural, sur 8 points précis.
+
+### Fait dans cette clôture
+
+1. **CI alignée sur l'environnement réellement prouvé** :
+   `.github/workflows/ci.yml`, `FLUTTER_VERSION` passé de `3.24.5`
+   (jamais exécuté ni prouvé dans ce dépôt) à `3.47.0` (version exacte du
+   build réel qui a produit 52/52 tests verts et l'APK debug).
+2. **`pubspec.lock` committé** : retiré de `mobile/.gitignore` (qui suivait
+   par défaut la convention "bibliothèque Flutter", inadaptée à une
+   application) et committé tel que résolu par le `flutter pub get` du
+   build réellement validé (même horodatage que l'exécution qui a produit
+   l'APK : 2026-08-19T14:59:43+02:00) - fige les versions qui ont
+   effectivement fonctionné, après toutes les difficultés de dépendances
+   rencontrées en R0.2.1.
+3. **Les 14 `info` de `flutter analyze` corrigés** (viser 0 issue) :
+   - `mobile/lib/core/design_system/rf_theme.dart` : `const` ajouté sur
+     `BottomSheetThemeData` (4 occurrences imbriquées résolues par
+     propagation du contexte const).
+   - `mobile/lib/features/facts_review/presentation/facts_review_screen.dart` :
+     `color.withOpacity(0.12)` → `color.withValues(alpha: 0.12)` (API de
+     remplacement suggérée par le message de dépréciation lui-même).
+   - `mobile/lib/features/home/presentation/home_screen.dart` : `const`
+     ajouté sur le `Padding` racine du corps d'écran (4 occurrences
+     imbriquées résolues par propagation).
+   - `mobile/lib/features/incident_create/presentation/create_incident_screen.dart` :
+     `const` ajouté sur un `Text` isolé (le reste de l'arbre contient un
+     `TextField` avec contrôleur, non const-compatible).
+   - `mobile/lib/features/reserve/presentation/reserve_screen.dart` :
+     `const` ajouté sur `Card`/`Text` (les deux champs affichés,
+     `_sampleReserveText`/`_prudenceMention`, sont déjà des
+     `static const String`).
+   - **Non encore reconfirmé par une nouvelle exécution réelle** au moment
+     de ce commit (voir `docs/DELIVERY_MANIFEST_R0.2.2.md`) - à vérifier
+     par le prochain `flutter analyze` sur le poste de l'utilisateur avant
+     de considérer ce point acquis, conformément au principe de ce projet.
+4. **APK transmis** pour vérification indépendante du SHA-256 annoncé en
+   R0.2.1 - **limitation découverte à cette occasion** : le fichier
+   (175,3 MiB) dépasse la limite de taille des pièces jointes de cette
+   conversation (30 MiB) et n'a donc pas pu être transmis par ce canal.
+   Reste disponible sur le poste de l'utilisateur ; son SHA-1 (généré par
+   Gradle) a été recalculé indépendamment sur la copie transférée dans cet
+   environnement et correspond exactement, ce qui prouve l'intégrité du
+   transfert vers CET environnement, mais pas encore une vérification par
+   l'équipe elle-même (qui ne l'a pas reçu).
+5. **Manifeste de livraison séparé** : `docs/DELIVERY_MANIFEST_R0.2.2.md`,
+   rassemblant environnement de build, commit/tag, SHA du ZIP et de l'APK,
+   statut `pubspec.lock`/`flutter analyze`/cahier de référence/CI GitHub en
+   un seul endroit.
+
+### Explicitement PAS fait dans cette clôture (honnêteté du statut)
+
+- **Cahier des charges v1.1** : le document n'a toujours pas été fourni
+  dans un emplacement accessible à ce développeur (ni upload conversation,
+  ni dossier connecté), malgré la demande explicite renouvelée dans
+  `docs/SPEC_BASELINE.md` depuis R0.2. Le SHA-256 cité par l'équipe dans sa
+  revue (`1c6b3db672d9d622679ecd6c8b20908e575e2702eeb4dcc839609b21ea5ccd1b`)
+  n'a pas pu être vérifié indépendamment contre un fichier réel - il n'a
+  donc **volontairement pas** été inscrit dans `SPEC_BASELINE.md`.
+  Inscrire une référence à un document jamais vu casserait exactement le
+  principe "GATE zéro invention" que ce projet applique à son propre
+  contenu métier ET à sa documentation de traçabilité. **Le fichier PDF
+  v1.1 doit être déposé dans la conversation ou le dossier connecté pour
+  que ce point puisse être clos.**
+- **Exécution réelle de la CI GitHub Actions** : ce bac à sable n'est pas
+  connecté à un dépôt GitHub distant, aucun push n'a été effectué. Le
+  fichier YAML est valide et aligné sur Flutter 3.47.0, mais son
+  exécution verte sur un vrai runner reste à démontrer.
+
 ## [0.1.3] - R0.2.1 Hotfix (première exécution réelle) - 2026-08-19
 
 ### Livraison finale de cette version

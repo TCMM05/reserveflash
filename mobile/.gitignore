@@ -6,7 +6,19 @@ build/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-pubspec.lock
+
+# R0.2.2 (revue equipe apres R0.2.1) : `pubspec.lock` etait auparavant
+# ignore ici, suivant la convention habituelle des PACKAGES/bibliotheques
+# Flutter (qui doivent laisser leurs consommateurs resoudre leurs propres
+# versions). Mais `mobile/` est une APPLICATION, pas une bibliotheque -
+# pour une application, la pratique recommandee est l'inverse : committer
+# le lockfile pour figer exactement les versions qui ont ete reellement
+# prouvees par execution (voir CHANGELOG.md, les 8 vagues de correctifs
+# de dependances). Sans lockfile committe, un `flutter pub get` dans
+# quelques mois pourrait resoudre des versions differentes et
+# potentiellement retomber dans les memes problemes deja corriges ici.
+# pubspec.lock volontairement PLUS ignore - voir mobile/pubspec.lock,
+# genere par le `flutter pub get` du build reellement valide.
 
 # Fichiers générés (build_runner: drift, freezed, json_serializable, riverpod_generator)
 *.g.dart

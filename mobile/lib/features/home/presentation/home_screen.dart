@@ -25,18 +25,18 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(RfSpacing.lg),
+      body: const Padding(
+        padding: EdgeInsets.all(RfSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text('Derniers dossiers', style: RfTypography.sectionTitle),
-            const SizedBox(height: RfSpacing.sm),
-            const Text(
+            SizedBox(height: RfSpacing.sm),
+            Text(
               'Aucun incident pour le moment.',
               style: RfTypography.secondary,
             ),
-            const Spacer(),
+            Spacer(),
           ],
         ),
       ),

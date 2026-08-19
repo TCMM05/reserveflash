@@ -38,7 +38,7 @@ class _CreateIncidentScreenState extends State<CreateIncidentScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
+            const Text(
               'Date et heure enregistrées automatiquement.',
               style: RfTypography.secondary,
             ),
