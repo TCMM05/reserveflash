@@ -42,6 +42,7 @@ import 'package:reserveflash/data/local/app_database.dart';
 import 'package:reserveflash/data/local/evidence_storage.dart';
 import 'package:reserveflash/data/local/local_incident_repository.dart';
 import 'package:reserveflash/domain/entities/evidence_asset.dart' as domain;
+import 'package:reserveflash/domain/entities/incident.dart' as domain;
 import 'package:reserveflash/domain/repositories/incident_repository.dart';
 import 'package:reserveflash/features/common/presentation/evidence_photo_viewer_screen.dart';
 import 'package:reserveflash/features/common/presentation/evidence_thumbnail_tile.dart';
@@ -114,7 +115,7 @@ void main() {
     await _cleanupTempDir(tempDir);
   });
 
-  Widget _wrap(Widget child) {
+  Widget wrap(Widget child) {
     return ProviderScope(
       overrides: <Override>[
         incidentRepositoryProvider.overrideWithValue(repository),
@@ -130,8 +131,8 @@ void main() {
   // unique route racine) - ce wrapper reproduit fidèlement cette situation
   // (un écran de base + le vrai écran poussé par-dessus), pour que `pop()`
   // ait réellement une route sous lui vers laquelle revenir.
-  Widget _wrapPushed(Widget child) {
-    return _wrap(
+  Widget wrapPushed(Widget child) {
+    return wrap(
       Builder(
         builder: (BuildContext context) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -171,7 +172,7 @@ void main() {
 
       bool opened = false;
       await tester.pumpWidget(
-        _wrap(
+        wrap(
           Builder(
             builder: (BuildContext context) => Scaffold(
               body: EvidenceThumbnailTile(
@@ -277,7 +278,7 @@ void main() {
       expect(missingAsset.availabilityStatus, equals(domain.EvidenceAvailability.missing));
 
       await tester.pumpWidget(
-        _wrap(EvidencePhotoViewerScreen(incidentId: incident.id, asset: missingAsset)),
+        wrap(EvidencePhotoViewerScreen(incidentId: incident.id, asset: missingAsset)),
       );
       await tester.pumpAndSettle();
 
@@ -310,7 +311,7 @@ void main() {
       expect(corruptedAsset.availabilityStatus, equals(domain.EvidenceAvailability.corrupted));
 
       await tester.pumpWidget(
-        _wrap(EvidencePhotoViewerScreen(incidentId: incident.id, asset: corruptedAsset)),
+        wrap(EvidencePhotoViewerScreen(incidentId: incident.id, asset: corruptedAsset)),
       );
       await tester.pumpAndSettle();
 
@@ -336,7 +337,7 @@ void main() {
       await repository.registerEvidenceAsset(asset);
 
       await tester.pumpWidget(
-        _wrapPushed(EvidencePhotoViewerScreen(incidentId: incident.id, asset: asset)),
+        wrapPushed(EvidencePhotoViewerScreen(incidentId: incident.id, asset: asset)),
       );
       await tester.pumpAndSettle();
 
