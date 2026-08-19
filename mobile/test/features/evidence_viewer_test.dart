@@ -118,14 +118,31 @@ Future<T> traced<T>(Future<T> future, String label) async {
   return result;
 }
 
+// `flutter test` réel (poste utilisateur) a montré qu'un seul aller-retour
+// `runAsync(50ms) -> pumpAndSettle()` suffit pour de la vraie I/O disque
+// "passive" (Image.file chargée pendant un pump), mais PAS pour de la
+// vraie I/O disque déclenchée DEPUIS l'intérieur d'un écran par une action
+// utilisateur (ex. le bouton "Supprimer" : vérification + suppression
+// fichier + suppression base, en chaîne) - `pumpAndSettle timed out` sur ce
+// cas précis avec un délai fixe de 50ms. Plutôt que remonter le délai à
+// l'aveugle (fragile sur une machine plus lente/un antivirus qui scanne),
+// on alterne plusieurs petits passages temps réel (`runAsync`) et pumps en
+// temps simulé (`pump`), jusqu'à ce que plus rien ne soit en attente - un
+// `pumpAndSettle()` final absorbe l'éventuelle animation restante.
 Future<void> settleWithRealIo(WidgetTester tester) async {
-  await traced(
-    tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }),
-    'settleWithRealIo -> runAsync(delay 50ms)',
-  );
-  await traced(tester.pumpAndSettle(), 'settleWithRealIo -> pumpAndSettle (après runAsync)');
+  for (int i = 0; i < 20; i++) {
+    await traced(
+      tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }),
+      'settleWithRealIo -> runAsync(delay 50ms) [tour $i]',
+    );
+    await traced(
+      tester.pump(const Duration(milliseconds: 50)),
+      'settleWithRealIo -> pump(50ms) [tour $i]',
+    );
+  }
+  await traced(tester.pumpAndSettle(), 'settleWithRealIo -> pumpAndSettle final');
 }
 
 Future<void> _cleanupTempDir(Directory dir) async {
