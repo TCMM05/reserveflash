@@ -129,12 +129,19 @@ APRÈS (`Successfully installed ... reserveflash-backend-0.1.0`, `import
 app` fonctionne, `ruff check` toujours vert). `backend/.gitignore` complété
 avec `*.egg-info/` (artefact généré localement par cette installation).
 
-**Statut à ce stade** : le bug qui bloquait le tout premier step du job
-`backend` est corrigé et vérifié en local (reproduction de l'échec puis du
-succès). Le nouveau commit doit encore être repoussé vers
-`TCMM05/reserveflash` pour confirmer un run CI complet et vert sur le vrai
-runner GitHub - voir la suite du fil de discussion / le prochain commit
-pour le résultat.
+Le correctif a été repoussé vers `TCMM05/reserveflash` (commit `6aa7f88`,
+run CI #2) - **résultat : run complet vert, 4/4 jobs, 7m36s au total** :
+`backend` (44s), `secret-scan`/gitleaks (6s), `build-staging`, dépendant du
+succès de `backend` (25s), et `mobile` - analyze/tests/build APK debug, le
+plus long (7m33s). Capture d'écran du run fournie par l'utilisateur,
+consultable sur `https://github.com/TCMM05/reserveflash/actions` (run #2,
+commit `6aa7f88`).
+
+**C'est la première fois que ce dépôt obtient une exécution complète et
+verte sur un vrai runner GitHub Actions** - le dernier point resté ouvert
+de la revue R0.2.2 est donc clos, avec la même exigence de preuve par
+exécution que le reste du projet (le bug ci-dessus n'aurait justement
+jamais été détecté sans cette exécution réelle).
 
 ### Explicitement PAS fait dans cette clôture (honnêteté du statut)
 

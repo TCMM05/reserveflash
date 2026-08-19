@@ -98,8 +98,15 @@ formulation du Gate R0, R4 intégrité) ont chacune une source exacte
 
 ## CI GitHub Actions réelle
 
-**Non exécutée** - ce bac à sable n'est pas connecté à un dépôt GitHub
-distant ; aucun push n'a été effectué. Le fichier `.github/workflows/ci.yml`
-est syntaxiquement valide et désormais aligné sur Flutter 3.47.0, mais son
-exécution verte reste à démontrer sur un vrai runner GitHub Actions, par
-un push vers un dépôt réel.
+**Exécutée et verte** (2026-08-19) - dépôt poussé vers `TCMM05/reserveflash`
+(historique et tags complets, via `git bundle` pour préserver l'intégrité
+entre ce qui est committé ici et ce qui a été poussé). Le tout premier run
+(commit `cf2d17c`) a révélé un vrai bug de packaging Python
+(`backend/pyproject.toml` sans `[build-system]` -> échec `pip install -e
+".[dev]"`, voir CHANGELOG.md), corrigé dans le commit `6aa7f88`.
+
+Run CI #2 (commit `6aa7f88`) : **4/4 jobs verts, 7m36s au total** -
+`backend` (44s), `secret-scan`/gitleaks (6s), `build-staging` (25s,
+dépendant du succès de `backend`), `mobile` - analyze/tests/build APK
+debug (7m33s). Consultable sur
+`https://github.com/TCMM05/reserveflash/actions`.
