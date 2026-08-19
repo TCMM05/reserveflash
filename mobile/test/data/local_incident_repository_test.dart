@@ -35,7 +35,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:drift/drift.dart';
+// R0.2 (hotfix decouvert par execution reelle) : ne PAS importer
+// `package:drift/drift.dart` ici en plus de `package:drift/native.dart` -
+// le premier re-exporte `isNotNull`/`isNull`, qui entrent en collision avec
+// les matchers de meme nom de `package:flutter_test` (`ambiguous_import`).
+// Seul `NativeDatabase` (de `drift/native.dart`) est reellement utilise par
+// ce fichier.
 import 'package:drift/native.dart';
 import 'package:reserveflash/data/local/app_database.dart';
 import 'package:reserveflash/data/local/local_incident_repository.dart';
@@ -68,7 +73,32 @@ void main() {
 
   tearDown(() async {
     if (await tempDir.exists()) {
-      await tempDir.delete(recursive: true);
+      // R0.2 (hotfix decouvert par execution reelle sur Windows) : sur
+      // Windows, le verrou OS sur le fichier SQLite ouvert par
+      // `NativeDatabase` n'est pas toujours libere de facon synchrone au
+      // retour de `db.close()` (le driver natif le relache de facon
+      // asynchrone) - `Directory.delete(recursive: true)` levait alors
+      // `PathAccessException` ("...ce fichier est utilise par un autre
+      // processus", errno = 32), faisant echouer le test de nettoyage
+      // alors que TOUTES les assertions metier avaient deja reussi.
+      // Correctif : quelques tentatives espacees d'un court delai avant
+      // d'abandonner ; si le nettoyage echoue quand meme, ne PAS faire
+      // echouer le test pour un residu de fichier temporaire purement
+      // cosmetique (le dossier restera dans le repertoire temp systeme,
+      // sans consequence fonctionnelle ni impact sur la preuve de
+      // persistance elle-meme, deja verifiee par les `expect` ci-dessus).
+      const int maxAttempts = 5;
+      for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          await tempDir.delete(recursive: true);
+          break;
+        } on FileSystemException {
+          if (attempt == maxAttempts) {
+            break;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        }
+      }
     }
   });
 

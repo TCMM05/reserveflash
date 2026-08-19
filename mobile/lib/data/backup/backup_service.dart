@@ -412,7 +412,7 @@ class BackupService {
         'incident_id': row.incidentId,
         'template_version': row.templateVersion,
         'confirmed_fact_revision': row.confirmedFactRevision,
-        'text': row.text,
+        'text': row.reserveText,
         'sha256': row.sha256,
         'created_at': row.createdAt.toIso8601String(),
       };
@@ -511,7 +511,7 @@ class BackupService {
       incidentId: row['incident_id'] as String,
       templateVersion: row['template_version'] as String,
       confirmedFactRevision: row['confirmed_fact_revision'] as int,
-      text: row['text'] as String,
+      reserveText: row['text'] as String,
       sha256: row['sha256'] as String,
       createdAt: DateTime.parse(row['created_at'] as String),
     );

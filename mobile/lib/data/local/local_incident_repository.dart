@@ -327,7 +327,7 @@ final class LocalIncidentRepository implements IncidentRepository {
             incidentId: incidentId,
             templateVersion: composed.templateVersion,
             confirmedFactRevision: maxRevision,
-            text: composed.text,
+            reserveText: composed.text,
             sha256: composed.sha256,
             createdAt: now,
           ),
@@ -364,7 +364,7 @@ final class LocalIncidentRepository implements IncidentRepository {
       incidentId: row.incidentId,
       templateVersion: row.templateVersion,
       confirmedFactRevision: row.confirmedFactRevision,
-      text: row.text,
+      text: row.reserveText,
       sha256: row.sha256,
       createdAt: row.createdAt,
     );

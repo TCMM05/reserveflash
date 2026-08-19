@@ -1,0 +1,37 @@
+# R0.2 (hotfix decouvert par execution reelle, troisieme vague) :
+#
+# `flutter test test/data/local_incident_repository_test.dart` echouait
+# reellement sur :
+#   Expected: DateTime:<2026-08-19 10:30:00.000Z>
+#     Actual: DateTime:<2026-08-19 12:30:00.000>
+#
+# Root cause (confirmee via la doc officielle drift, guide
+# "guides/datetime-migrations") : en mode de stockage par defaut (entier
+# unix timestamp), drift NE PRESERVE PAS si un DateTime etait UTC ou
+# local au moment de l'ecriture - "drift always returns a non-UTC value.
+# So even when UTC date times are stored, this information is lost when
+# retrieving rows." Ici, `occurredAt` est cree via `DateTime.utc(...)`
+# (isUtc: true), mais apres un aller-retour disque (fermeture + reouverture
+# de la connexion, exactement le scenario que ce test est cense prouver -
+# voir CHANGELOG.md, point 6 de la demande corrective), drift le retourne
+# en heure locale (isUtc: false). Meme INSTANT (12:30 heure d'ete Paris ==
+# 10:30 UTC), mais l'operateur `==` de `DateTime` (voir doc officielle
+# dart:core) compare l'instant ET le flag UTC/local - deux DateTime au
+# meme instant mais avec un flag different sont donc INEGAUX. Un vrai bug
+# de fidelite des donnees : `occurredAt` doit rester exactement ce que
+# l'utilisateur a saisi, pas glisser silencieusement d'UTC vers l'heure
+# locale de l'appareil apres un redemarrage de l'app.
+#
+# Correctif : option de generation `drift_dev` qui stocke les DateTime en
+# TEXT ISO 8601 plutot qu'en entier unix - ce mode preserve explicitement
+# le flag UTC/local ("UTC values are stored unchanged (e.g.
+# 2022-07-25 09:28:42.015Z), while local values have their UTC offset
+# appended."). Sans consequence de migration ici : le schema Drift n'a
+# encore jamais ete livre avec des donnees utilisateur reelles (Gate R0
+# toujours en cours de validation), donc aucune base existante a migrer.
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          store_date_time_values_as_text: true

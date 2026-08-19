@@ -2,6 +2,370 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.1.3] - R0.2.1 Hotfix (première exécution réelle) - 2026-08-19
+
+Premiers correctifs issus d'une VRAIE exécution de `flutter create` /
+`flutter pub get` / `dart run build_runner build` sur un poste équipé du SDK
+Flutter (3.47.0, Dart 3.13.0) - exactement ce que le retour de recette
+demandait ("nous voulons la preuve par test/exécution, pas l'affirmation").
+Deux problèmes réels, invisibles à la seule lecture du code, sont apparus
+dès la première tentative :
+
+- **`mobile/lib/data/local/app_database.dart`** : la directive `library;`
+  était placée APRÈS `import`/`part`, ce qui est invalide en Dart (la
+  directive `library`, si présente, doit être la toute première du fichier)
+  - `build_runner` levait `The library directive must appear before all
+  other directives.` Corrigé en replaçant `library;` (et le commentaire de
+  documentation associé) en tête de fichier.
+- **`mobile/pubspec.yaml`** : `riverpod_generator`, `freezed` et
+  `json_serializable` (dev_dependencies) embarquaient un `analyzer` trop
+  ancien (langue Dart 3.9) pour le SDK Dart 3.13 réellement installé -
+  `build_runner build` plantait avec `Exception: Missing implementation of
+  visitDotShorthandPropertyAccess` en tentant d'analyser le SDK Flutter
+  lui-même (pas notre code). Vérifié avant suppression : aucun fichier de ce
+  dépôt n'utilise `@riverpod`, `@freezed` ni `@JsonSerializable` (grep sur
+  `lib/`, zéro résultat) - ces trois générateurs étaient présents par
+  anticipation mais totalement inutilisés. Retirés pour l'instant ; à
+  ré-ajouter avec des versions à jour le jour où du code annoté est
+  réellement introduit (probable en R1+).
+
+### Deuxième vague (après ré-exécution avec les 2 correctifs ci-dessus)
+
+`build_runner` a ensuite tourné sans planter, mais a produit un
+`app_database.g.dart` VIDE (`allSchemaEntities => []`, aucune des 9 tables).
+`flutter analyze` a révélé la cause racine, ainsi que 3 autres bugs réels
+indépendants, tous confirmés par une VRAIE exécution :
+
+- **`mobile/lib/data/local/app_database.dart`** : la table
+  `LocalReserveTexts` définissait une colonne nommée `text`
+  (`TextColumn get text => text()();`), qui entre en collision avec la
+  méthode `Table.text()` héritée (le builder utilisé pour DÉFINIR une
+  colonne texte) - `flutter analyze` le confirme littéralement : `Class
+  'LocalReserveTexts' can't define field 'text' and have method 'Table.text'
+  with the same name.` Cette collision faisait planter `drift_dev` sur cette
+  seule table, ce qui invalidait la génération de TOUT le fichier
+  (`allSchemaEntities => []`), ce qui à son tour cassait en cascade des
+  dizaines de références dans `local_incident_repository.dart` et
+  `backup_service.dart` (classes `LocalIncident`, `LocalIncidentsCompanion`,
+  etc. "introuvables"), et empêchait toute compilation - `flutter build apk
+  --debug` échouait avec `Target kernel_snapshot_program failed: Exception`
+  pour cette même raison. Corrigé en renommant la colonne `text` ->
+  `reserveText` (répercuté dans `local_incident_repository.dart` et
+  `backup_service.dart`, 4 sites d'appel).
+- **`mobile/lib/domain/liability_guard.dart`** (bug de correction, PAS de
+  compilation) : 3 tests du garde-fou échouaient réellement -
+  `"carton à la charge du fournisseur"` (LIABILITY_ATTRIBUTION),
+  `"remboursement dû au client"` (INDEMNIFICATION_PROMISE),
+  `"vice caché constaté"` (LEGAL_CONCLUSION) - le garde-fou laissait passer
+  SILENCIEUSEMENT ces formulations au lieu de les bloquer. Cause : les
+  `RegExp` Dart n'utilisent PAS un `\b`/`\w` Unicode par défaut
+  (contrairement au module `re` de Python utilisé côté backend, Unicode par
+  défaut) - une frontière `\b` juste avant/après une lettre accentuée ("à",
+  "dû", "caché") ne correspond alors JAMAIS à une frontière de mot. C'est
+  exactement le type de divergence Python/Dart qu'une simple relecture de
+  code ne peut pas détecter. **Premier correctif tenté ici (ajout de
+  `unicode: true` aux 5 `RegExp`) INSUFFISANT** - voir "Troisième vague"
+  ci-dessous pour le correctif réel, découvert par une RE-exécution des
+  tests qui a échoué de façon identique après ce premier correctif.
+- **`mobile/test/widget_test.dart`** : fichier généré par `flutter create .`
+  avec son boilerplate par défaut (`MyApp`, compteur), qui ne correspond à
+  rien dans notre app (`ReserveFlashApp`, voir `lib/main.dart`) -
+  `flutter analyze`/`flutter test` échouaient avec `The name 'MyApp' isn't a
+  class.` Remplacé par un smoke test minimal réel (`pumpWidget` de
+  `ReserveFlashApp`, vérifie qu'un `MaterialApp` est bien construit).
+- **`mobile/test/data/local_incident_repository_test.dart`** (bug dans le
+  test ajouté en R0.2, point 6 de la demande corrective) : import inutile de
+  `package:drift/drift.dart` (en plus de `package:drift/native.dart`, le
+  seul réellement nécessaire) - le premier ré-exporte `isNotNull`/`isNull`,
+  qui entrent en collision avec les matchers de même nom de
+  `package:flutter_test` (`ambiguous_import`). Corrigé en retirant l'import
+  inutile.
+- **`mobile/pubspec.yaml`** : `flutter build apk --debug` échouait
+  séparément (après le correctif `text`/`reserveText`) sur
+  `record_linux-0.7.2`, qui n'implémente pas l'interface
+  `record_platform_interface-1.6.0` résolue (`startStream` manquant,
+  signature de `hasPermission` incompatible) - Dart refuse de compiler le
+  kernel snapshot de l'app, même pour une cible Android, dès qu'un paquet de
+  plateforme du graphe de dépendances ne compile pas. Vérifié avant retrait
+  : `record` n'est utilisé nulle part dans `lib/` (grep, zéro résultat) - la
+  capture audio (F06/F07/F11) n'est pas encore implémentée. Retiré
+  temporairement (commenté, avec justification) ; à ré-ajouter avec une
+  version laissant `pub` résoudre un jeu cohérent de sous-paquets (ou un
+  `dependency_overrides` explicite) le jour où la capture audio est
+  réellement codée.
+
+Après ces correctifs, `flutter create`/`flutter pub get` avaient déjà
+réussi sur le poste de l'utilisateur avant le hotfix ; `build_runner build`
+(génération de `app_database.g.dart`), `flutter analyze`, `flutter test` et
+`flutter build apk --debug` restent à re-tenter avec ce correctif - voir
+`docs/GATE_R0.1_STATUS.md` pour le statut mis à jour une fois le résultat
+connu.
+
+### Troisième vague (après ré-exécution avec les correctifs de la deuxième vague)
+
+La ré-exécution a confirmé que 3 des 4 bugs de la deuxième vague étaient
+bien corrigés (plus d'erreur `text`/`MyApp`/`ambiguous_import`), mais a
+révélé que le correctif du garde-fou anti-attribution était INSUFFISANT,
+plus 2 bugs supplémentaires non vus jusqu'ici :
+
+- **`mobile/lib/domain/liability_guard.dart`** (correctif réel du bug
+  décrit en deuxième vague) : les 3 mêmes tests échouaient encore, à
+  l'identique, APRÈS le premier correctif (`unicode: true` seul). Vérifié
+  que ce correctif était bien déployé (pas un problème de synchronisation)
+  avant de ré-investiguer. Cause réelle : le flag `unicode: true` d'un
+  `RegExp` Dart NE rend PAS `\b`/`\w` sensibles à l'Unicode (ce
+  comportement est hérité de la sémantique JavaScript/ECMAScript, où le
+  flag `u` ne change pas non plus `\w`) - il active uniquement les échappes
+  de propriété Unicode `\p{...}`/`\P{...}`. Correctif réel : remplacement
+  des frontières `\b` par des lookaround explicites sur la catégorie
+  Unicode "Lettre" + chiffre/underscore - `(?<![\p{L}\p{N}_])` (non précédé
+  d'un caractère de mot Unicode) et `(?![\p{L}\p{N}_])` (non suivi) -, qui
+  EUX exploitent réellement `unicode: true`. Appliqué aux 4 motifs
+  concernés (LIABILITY_ATTRIBUTION, INDEMNIFICATION_PROMISE,
+  LEGAL_CONCLUSION, LEGAL_QUALIFICATION) ; INVENTED_AMOUNT inchangé (son
+  usage interne de `eur\b` n'a pas ce problème de frontière accentuée).
+  **Bug de sécurité fonctionnelle réel** : entre les deux correctifs, le
+  garde-fou aurait laissé passer silencieusement des formulations
+  d'attribution de responsabilité se terminant/commençant par une lettre
+  accentuée - exactement le type de contenu qu'il existe pour bloquer.
+- **`mobile/lib/data/share/reserve_share_service.dart`** : `flutter
+  analyze` échouait avec `Undefined name 'SharePlus'` et `The method
+  'ShareParams' isn't defined for the type 'ReserveShareService'`. Cause :
+  `pubspec.yaml` déclarait `share_plus: ^10.0.2`, qui autorise uniquement
+  des versions `10.x.x` - or la classe unifiée `SharePlus` et son paramètre
+  `ShareParams` n'ont été introduits qu'en version 11.0.0 du paquet
+  (confirmé via le changelog officiel `share_plus` sur pub.dev). `pub get`
+  résolvait donc la dernière version 10.x compatible (10.1.4), qui
+  n'expose pas ces symboles, alors que le code du fichier utilisait déjà
+  l'API 11.0.0+. Corrigé en relevant la contrainte à `share_plus: ^11.0.0`
+  (borné à `<12.0.0` volontairement, pour ne pas importer en même temps les
+  nouvelles exigences Android Gradle Plugin/Gradle wrapper des versions
+  12.0.0+, non testées et hors périmètre de ce hotfix - dernière version
+  stable constatée au moment du correctif : 13.3.0).
+- **`mobile/test/data/local_incident_repository_test.dart`** (bug
+  d'infrastructure de test, spécifique à Windows) : les 3 tests de
+  persistance disque (point 6 de la demande corrective) échouaient en fin
+  d'exécution avec `PathAccessException` sur `tempDir.delete(recursive:
+  true)` dans `tearDown` - `"...ce fichier est utilisé par un autre
+  processus", errno = 32`. Cause : sur Windows, le verrou OS sur le fichier
+  SQLite ouvert par `NativeDatabase` n'est pas toujours libéré de façon
+  synchrone au retour de `db.close()` (le driver natif le relâche de façon
+  asynchrone), donc la suppression immédiate du dossier temporaire pouvait
+  s'exécuter avant la libération effective du handle - un problème
+  spécifique à Windows, absent sur les systèmes de type Unix. Les
+  assertions métier elles-mêmes (preuve de persistance) réussissaient
+  toutes ; seul le nettoyage échouait, faisant néanmoins échouer le test
+  dans son ensemble. Corrigé en retentant la suppression jusqu'à 5 fois
+  avec un court délai entre chaque tentative, et en abandonnant
+  silencieusement (sans faire échouer le test) si le nettoyage échoue
+  malgré tout - un résidu de dossier temporaire est sans conséquence
+  fonctionnelle, contrairement à un faux échec de la preuve de persistance
+  elle-même.
+
+`flutter build apk --debug` échouait aussi lors de cette troisième
+exécution ; la cause exacte n'a pas encore été confirmée indépendamment
+mais est vraisemblablement entièrement expliquée par les erreurs de
+compilation `SharePlus`/`ShareParams` ci-dessus (un échec de compilation
+Dart, où qu'il survienne dans le graphe de l'app, bloque le kernel
+snapshot pour toute la cible, comme déjà observé avec le bug
+`record_linux` en deuxième vague) - à confirmer par la prochaine
+exécution réelle.
+
+### Quatrième vague (après ré-exécution avec les correctifs de la troisième vague)
+
+Cette hypothèse ci-dessus était **fausse** : la ré-exécution a confirmé que
+`SharePlus`/`ShareParams` compilaient bien, et a révélé la vraie cause du
+`flutter build apk --debug` (indépendante), plus 2 bugs réels
+supplémentaires non vus jusqu'ici - toujours des bugs qu'une relecture de
+code n'aurait pas détectés :
+
+- **`mobile/lib/domain/liability_guard.dart`** (même bug racine que la
+  troisième vague, mais À L'INTÉRIEUR d'un motif cette fois) : le test
+  `"sera indemnisé intégralement" est bloqué (INDEMNIFICATION_PROMISE)`
+  échouait - `screenConfirmedFact` ne levait plus l'exception attendue
+  (`Actual: returned <null>`). Cause : `indemnis\w*` utilise `\w`, LUI
+  AUSSI ASCII-only en Dart (`[A-Za-z0-9_]`, `unicode: true` ne change rien
+  ici non plus) - sur `"indemnisé"`, `\w*` s'arrêtait juste avant le "é",
+  puis le lookahead Unicode-aware `(?![\p{L}\p{N}_])` (corrigé en
+  troisième vague) refusait la position car "é" EST un caractère de mot
+  Unicode - contradiction entre un `\w*` ASCII à l'intérieur du motif et
+  une frontière vérifiée en Unicode juste après. Corrigé en remplaçant
+  `indemnis\w*`/`dédommag\w*` par `indemnis[\p{L}\p{N}_]*`/
+  `dédommag[\p{L}\p{N}_]*`.
+- **Persistance des `DateTime` (Drift)** : le test de persistance disque
+  réelle (point 6 de la demande corrective) échouait sur
+  `expect(reopened.occurredAt, equals(occurredAt))` -
+  `Expected: DateTime:<2026-08-19 10:30:00.000Z>` /
+  `Actual: DateTime:<2026-08-19 12:30:00.000>`. Root cause (confirmée via
+  la documentation officielle Drift, guide "DateTime Storage") : en mode
+  de stockage par défaut (entier unix timestamp), Drift NE PRÉSERVE PAS le
+  flag UTC/local d'un `DateTime` - "drift always returns a non-UTC value.
+  So even when UTC date times are stored, this information is lost when
+  retrieving rows." `occurredAt` est créé via `DateTime.utc(...)`, mais
+  après fermeture/réouverture de la connexion (exactement le scénario que
+  ce test doit prouver), Drift le retourne en heure locale. Même INSTANT
+  (12:30 heure d'été Paris == 10:30 UTC), mais l'opérateur `==` de
+  `DateTime` compare l'instant ET le flag UTC/local (documentation
+  officielle `dart:core`) - deux `DateTime` au même instant avec un flag
+  différent sont donc INÉGAUX. Un vrai bug de fidélité des données :
+  `occurredAt` glissait silencieusement d'UTC vers l'heure locale de
+  l'appareil après un redémarrage de l'app. Corrigé en ajoutant
+  `mobile/build.yaml` avec l'option de génération `drift_dev` :
+  `store_date_time_values_as_text: true`, qui stocke les `DateTime` en
+  TEXT ISO 8601 et préserve explicitement le flag UTC/local. Sans
+  conséquence de migration : aucune base utilisateur réelle n'existe
+  encore (Gate R0 toujours en cours de validation).
+- **`flutter build apk --debug`** (cause réelle, indépendante de
+  `SharePlus`) : `BUILD FAILED` sur la tâche Gradle
+  `:camera_android_camerax:compileDebugJavaWithJavac` -
+  `error: Cannot attach type annotations @org.jspecify.annotations.NonNull
+  to SurfaceRequest.mSurfaceRecreationCompleter: class file for
+  androidx.concurrent.futures.CallbackToFutureAdapter not found`. Root
+  cause (confirmée via le fil officiel Google camerax-developers, "CameraX
+  1.5.0 fails to build") : `androidx.camera:camera-core` 1.5.x (utilisé en
+  transitif par le plugin `camera_android_camerax`) utilise
+  `CallbackToFutureAdapter` (de `androidx.concurrent:concurrent-futures`)
+  pour ses `ListenableFuture`, mais cette dépendance n'est plus résolue
+  automatiquement sur le classpath de compilation Java depuis cette
+  version - réponse officielle Google sur ce fil : "It might need to add
+  this dependency manually." PAS un bug de notre code Dart/Kotlin - ajouté
+  un bloc `dependencies { implementation("androidx.concurrent:concurrent-
+  futures:1.1.0") }` dans `mobile/android/app/build.gradle.kts` (fichier
+  généré par `flutter create .`, désormais versionné dans le dépôt avec ce
+  correctif pour que `flutter create .` le préserve tel quel - voir
+  commentaire dans le fichier - au lieu de régénérer une version sans le
+  correctif sur un poste n'ayant jamais eu de `repo/android/` existant).
+
+### Cinquième vague (après ré-exécution avec les correctifs de la quatrième vague)
+
+Les 52 tests Dart passent tous ("All tests passed!", suite complète + suite
+Drift dédiée) - les 4 vagues précédentes de correctifs Dart sont donc
+confirmées bonnes. `flutter analyze` : 0 erreur (14 `info` de style
+uniquement - `const` manquants, `withOpacity` déprécié ; PowerShell les
+affiche comme `NativeCommandError` uniquement parce que `flutter analyze`
+sort avec un code de retour non-nul dès qu'il trouve ne serait-ce qu'un
+`info`, ce n'est PAS un vrai échec). Seul `flutter build apk --debug`
+échouait encore, à l'IDENTIQUE de la vague précédente :
+
+- **`mobile/android/app/build.gradle.kts`** (correctif de la quatrième
+  vague, INSUFFISANT - prouvé par une ré-exécution identique) : ajouter la
+  dépendance manquante `androidx.concurrent:concurrent-futures` dans le
+  module `:app` n'avait aucun effet, car l'erreur de compilation Java
+  (`CallbackToFutureAdapter not found`) survient dans un SOUS-PROJET
+  Gradle DIFFÉRENT et distinct - `:camera_android_camerax` (le plugin
+  lui-même, généré par le "plugin loader" de Flutter à partir du paquet
+  pub, avec son propre classpath de compilation). Une dépendance déclarée
+  côté `:app` ne remonte jamais vers le classpath de compilation d'un
+  sous-projet dont `:app` dépend - seul l'inverse est vrai. Retiré (le
+  fichier redevient celui généré par `flutter create .`, avec un
+  commentaire renvoyant vers le vrai correctif).
+- **`mobile/android/build.gradle.kts`** (fichier RACINE du build multi-
+  projet Gradle - correctif réel) : root cause confirmée via le dépôt de
+  reproduction officiel du bug
+  (`github.com/justshowcode/flutter_packages_camerax_repro`) :
+  `androidx.camera:camera-core:1.5.3` déclare sa dépendance vers
+  `androidx.concurrent:concurrent-futures` avec la portée "runtime" dans
+  son POM. Jusqu'à Gradle 8.x, Gradle promouvait silencieusement cette
+  dépendance runtime vers le classpath de COMPILATION des consommateurs ;
+  Gradle 9.x (utilisé ici - `gradle-9.3.1`, visible dans les logs de
+  build) applique un isolement de classpath strict et ne fait plus cette
+  promotion, rendant la classe invisible au compilateur Java. Corrigé en
+  injectant la dépendance manquante dans TOUS les sous-projets Android
+  (donc `:camera_android_camerax` y compris) depuis ce fichier racine, via
+  un bloc `subprojects { afterEvaluate { ... dependencies.add(...) } }` -
+  sans éditer aucun fichier du cache pub (qui serait de toute façon écrasé
+  au prochain `flutter pub get`, sur cette machine comme sur n'importe
+  quelle autre - un correctif non reproductible sur un autre poste n'a
+  aucune valeur pour ce projet).
+
+À confirmer par la prochaine exécution réelle : c'est, à ce stade, le
+DERNIER échec connu du bootstrap complet (`flutter create` /
+`flutter pub get` / `build_runner` / `flutter analyze` / `flutter test` /
+`flutter build apk --debug`).
+
+### Sixième vague (après ré-exécution avec le correctif de la cinquième vague)
+
+Les tests Dart et `flutter analyze` restent bons (aucune régression). Le
+correctif Gradle racine de la cinquième vague a introduit un NOUVEAU bug,
+distinct du bug qu'il essayait de corriger :
+
+- **`mobile/android/build.gradle.kts`** : `flutter build apk --debug`
+  échouait immédiatement (5s, avant même la compilation) avec
+  `Cannot run Project.afterEvaluate(Action) when the project is already
+  evaluated.` (le message Gradle ne nomme PAS le sous-projet fautif - la
+  cause ci-dessous, "précisément sur `:app`", était une supposition NON
+  VÉRIFIÉE au moment d'écrire cette entrée ; elle s'est révélée fausse,
+  voir "Septième vague"). Hypothèse (partiellement correcte) : le bloc
+  `subprojects { project.evaluationDependsOn(":app") }` (déjà présent
+  dans le template Flutter par défaut, jamais modifié ici) force
+  l'évaluation anticipée de `:app`. Corrigé en ne ciblant plus `:app`
+  (il n'a d'ailleurs jamais été le module fautif du bug
+  `CallbackToFutureAdapter` - voir cinquième vague) : seul
+  `com.android.library` visé. **Ce correctif s'est révélé INSUFFISANT**
+  - voir "Septième vague" ci-dessous, qui a rejoué le même échec à
+  l'identique sur un sous-projet library cette fois, invalidant
+  l'hypothèse ci-dessus.
+
+### Septième vague (après ré-exécution avec le correctif de la sixième vague)
+
+Le correctif de la sixième vague (limiter la cible à `com.android.library`)
+échouait EXACTEMENT PAREIL - `Cannot run Project.afterEvaluate(Action)
+when the project is already evaluated.`, toujours sans nom de sous-projet
+dans le message Gradle. Ceci invalide l'hypothèse de la sixième vague
+("seul `:app` est déjà évalué à ce stade") : en réalité, TOUS les sous-
+projets (modules de plugins compris) sont déjà évalués au moment où un
+bloc `subprojects { ... }` placé APRÈS `subprojects {
+project.evaluationDependsOn(":app") }` s'exécute - quel que soit le
+sous-projet ciblé. Confirmé par un ticket officiel du dépôt
+`flutter/flutter` rapportant le même message d'erreur exact : en
+appliquant `dev.flutter.flutter-gradle-plugin`, l'évaluation de `:app`
+déclenchée par `evaluationDependsOn(":app")` force EN CASCADE
+l'évaluation de TOUS les sous-projets de plugins Flutter (le "plugin
+loader" doit inspecter la configuration AGP de chacun) - donc n'importe
+quel bloc placé après ce point trouve déjà tout le monde évalué, peu
+importe le filtre de plugin appliqué.
+
+Correctif réel : enregistrer le hook `afterEvaluate` (avec le même filtre
+`com.android.library` déjà en place) DANS LE PREMIER bloc `subprojects {
+... }` du fichier (celui qui relocalise `buildDirectory`, déjà présent
+dans le template par défaut et qui n'a jamais posé de problème sur les 6
+vagues précédentes), c'est-à-dire AVANT que `evaluationDependsOn(":app")`
+n'ait la moindre chance de s'exécuter pour quiconque. Les deux blocs
+`subprojects { ... }` d'origine sont fusionnés en un seul pour ce fichier
+racine (voir le fichier lui-même pour le détail commenté de ces trois
+tentatives successives, gardé intact pour ne pas reproduire deux fois la
+même hypothèse non vérifiée).
+
+### Huitième vague - premier bootstrap complet 100% vert (preuve par test obtenue)
+
+Ré-exécution avec le correctif de la septième vague : **succès complet, de
+bout en bout**, sur le poste réel de l'utilisateur -
+
+- `flutter create .` / `flutter pub get` / `build_runner build` : OK.
+- `flutter analyze` : 0 erreur (14 `info` de style, non bloquants).
+- `flutter test` (suite Drift dédiée + suite complète) : **52/52 tests
+  passés**, `All tests passed!` sur les deux commandes.
+- `flutter build apk --debug` : **`Built build\app\outputs\flutter-apk\
+  app-debug.apk`** - premier build APK réussi de tout ce cycle de
+  correctifs.
+
+C'est la première exécution réelle, de bout en bout, sans aucun échec -
+la preuve par test explicitement demandée par la recette ("Nous voulons
+la preuve par test, pas l'affirmation") est désormais obtenue, pas
+seulement affirmée. Au total, 8 vagues de correctifs ont été nécessaires
+pour passer d'un projet qui n'avait jamais tourné à ce résultat -
+récapitulatif des bugs réels trouvés UNIQUEMENT par exécution (aucun
+n'aurait été détecté par une simple relecture de code) :
+`library;` mal placé, générateurs de code incompatibles avec le SDK
+installé, collision de nom colonne/méthode Drift, boilerplate
+`flutter create` obsolète, import ambigu, dépendance `record` cassée,
+frontières Unicode `\b`/`\w` non gérées par Dart (bug de sécurité
+fonctionnelle réel sur le garde-fou anti-attribution), API `share_plus`
+non disponible dans la version résolue, verrou fichier Windows au
+nettoyage des tests, perte du flag UTC/local par Drift au redémarrage de
+l'app, et enfin une dépendance Gradle manquante dans un plugin tiers
+combinée à un ordre d'évaluation Gradle particulièrement retors.
+
 ## [0.1.2] - R0.2 Clôture ciblée - 2026-08-19
 
 Réponse point par point au retour de recette officiel sur `[0.1.1]` (verdict

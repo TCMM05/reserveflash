@@ -44,34 +44,74 @@ class _ForbiddenPattern {
 // ne doivent décrire QU'UN état physique constaté ("carton enfoncé"), jamais
 // une cause, une conséquence juridique/financière, ou une partie
 // responsable.
+//
+// R0.2 (hotfix decouvert par execution reelle du test suite sur un poste
+// equipe - CORRIGE UNE SECONDE FOIS apres un premier correctif insuffisant,
+// voir CHANGELOG.md) : `\b` de `package:dart:core` RegExp ne reconnait QUE
+// les caracteres ASCII comme "mots" - CE COMPORTEMENT N'EST PAS CHANGE par
+// `unicode: true` (contrairement a ce qu'un premier correctif supposait a
+// tort : ce flag active seulement `\p{...}`/`\P{...}`, il ne rend PAS `\b`
+// ou `\w` sensibles a l'Unicode - meme comportement qu'en JavaScript, dont
+// Dart hérite la semantique RegExp). Consequence reelle, prouvee par des
+// tests qui echouaient encore APRES le premier correctif ("unicode: true"
+// seul) : "carton à la charge du fournisseur" (LIABILITY_ATTRIBUTION, le
+// motif commence par "à"), "remboursement dû au client"
+// (INDEMNIFICATION_PROMISE, le motif "dû" se termine par "û"), "vice caché
+// constaté" (LEGAL_CONCLUSION, le motif "caché" se termine par "é") -
+// autrement dit le garde-fou laissait passer silencieusement exactement le
+// type de formulation qu'il est censé bloquer, des que la formulation
+// commençait ou finissait par une lettre accentuee.
+//
+// Correctif REEL : remplacer `\b` par des lookaround explicites sur la
+// categorie Unicode "Lettre" (`\p{L}`) + chiffre/underscore, qui EUX sont
+// bien Unicode-aware des lors que `unicode: true` est actif (c'est là son
+// vrai role). `(?<![\p{L}\p{N}_])` = pas précédé d'un caractère de mot
+// Unicode ; `(?![\p{L}\p{N}_])` = pas suivi d'un caractère de mot Unicode.
 final List<_ForbiddenPattern> _forbiddenPatterns = <_ForbiddenPattern>[
   _ForbiddenPattern(
     'LIABILITY_ATTRIBUTION',
     RegExp(
-      r'\b(responsab(le|ilité)s?|fautifs?|faute|'
+      r'(?<![\p{L}\p{N}_])(responsab(le|ilité)s?|fautifs?|faute|'
       r'imputable(\s+(au|à|aux))?|'
       r'à\s+la\s+charge\s+(du|de|des)|'
       r'de\s+la\s+faute\s+(du|de|des)|'
-      r'engage\s+sa\s+responsabilité)\b',
+      r'engage\s+sa\s+responsabilité)(?![\p{L}\p{N}_])',
       caseSensitive: false,
+      unicode: true,
     ),
   ),
   _ForbiddenPattern(
     'INDEMNIFICATION_PROMISE',
     RegExp(
-      r'\b(indemnis\w*|dédommag\w*|remboursera|'
+      // R0.2 (hotfix decouvert par execution reelle, troisieme vague) :
+      // meme bug racine que les lookaround ci-dessus, mais a l'INTERIEUR
+      // du motif cette fois - `\w` (utilise par `indemnis\w*`/
+      // `dédommag\w*`) est LUI AUSSI ASCII-only en Dart (`[A-Za-z0-9_]`),
+      // `unicode: true` ne change pas non plus ce comportement. Sur
+      // "indemnisé" (avec un "é" APRES le radical "indemnis"), `\w*`
+      // s'arretait avant le "é", puis le lookahead Unicode-aware
+      // `(?![\p{L}\p{N}_])` juste apres refusait la position car "é" EST
+      // un caractere de mot Unicode (`\p{L}`) - contradiction entre un
+      // `\w*` ASCII et une frontiere verifiee en Unicode. Preuve reelle :
+      // le test "sera indemnisé intégralement" ne levait plus
+      // l'exception (`Actual: returned <null>`). Corrige en remplacant
+      // `\w*` par `[\p{L}\p{N}_]*`, Unicode-aware au meme titre que les
+      // lookaround de frontiere.
+      r'(?<![\p{L}\p{N}_])(indemnis[\p{L}\p{N}_]*|dédommag[\p{L}\p{N}_]*|remboursera|'
       r'remboursement\s+(dû|du|garanti)|'
-      r'prise\s+en\s+charge\s+financière)\b',
+      r'prise\s+en\s+charge\s+financière)(?![\p{L}\p{N}_])',
       caseSensitive: false,
+      unicode: true,
     ),
   ),
   _ForbiddenPattern(
     'LEGAL_CONCLUSION',
     RegExp(
-      r'\b(manquement\s+contractuel|inexécution\s+contractuelle|'
+      r'(?<![\p{L}\p{N}_])(manquement\s+contractuel|inexécution\s+contractuelle|'
       r'violation\s+du\s+contrat|vice\s+caché|négligence|'
-      r"défaut\s+d.exécution|obligation\s+de\s+résultat)\b",
+      r"défaut\s+d.exécution|obligation\s+de\s+résultat)(?![\p{L}\p{N}_])",
       caseSensitive: false,
+      unicode: true,
     ),
   ),
   _ForbiddenPattern(
@@ -79,14 +119,16 @@ final List<_ForbiddenPattern> _forbiddenPatterns = <_ForbiddenPattern>[
     RegExp(
       r'(\d+[.,]?\d*\s?(€|eur\b|euros?)|montant\s+de\s+\d)',
       caseSensitive: false,
+      unicode: true,
     ),
   ),
   _ForbiddenPattern(
     'LEGAL_QUALIFICATION',
     RegExp(
-      r'\b(délit|infraction|faute\s+lourde|force\s+majeure|'
-      r'non[\s-]conformité\s+contractuelle|vice\s+de\s+forme)\b',
+      r'(?<![\p{L}\p{N}_])(délit|infraction|faute\s+lourde|force\s+majeure|'
+      r'non[\s-]conformité\s+contractuelle|vice\s+de\s+forme)(?![\p{L}\p{N}_])',
       caseSensitive: false,
+      unicode: true,
     ),
   ),
 ];

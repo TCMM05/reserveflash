@@ -39,14 +39,41 @@ dependencies:
   # Caméra / audio (F02/F06/F07/F11) - la capture ne dépend jamais du réseau
   # (section 8.1).
   camera: ^0.11.0
-  record: ^5.1.2
   permission_handler: ^11.3.1
+  # R0.2 (hotfix decouvert par execution reelle - `flutter build apk
+  # --debug`) : `record: ^5.1.2` retire TEMPORAIREMENT. Le sous-paquet
+  # plateforme resolu `record_linux-0.7.2` n'implemente pas l'interface
+  # `record_platform_interface-1.6.0` (methode `startStream` manquante,
+  # signature de `hasPermission` incompatible) - Dart refuse de compiler le
+  # kernel snapshot de l'app (meme pour un build Android), quel que soit le
+  # fait que Linux ne soit pas une cible de ce projet. Verifie avant retrait
+  # : `record` n'est utilise nulle part dans lib/ (grep, zero resultat) -
+  # feature F06/F07/F11 (capture audio) pas encore implementee. A
+  # ré-ajouter, avec une version recente laissant pub resoudre un jeu
+  # coherent de sous-paquets (ou un `dependency_overrides` explicite), le
+  # jour ou la capture audio est reellement codee - voir CHANGELOG.md.
+  # record: ^5.1.2
 
   # Icônes Material Symbols cohérentes (section 4.5).
   material_symbols_icons: ^4.2719.3
 
   # Partage natif du PDF exporté (F14).
-  share_plus: ^10.0.2
+  # R0.2 (hotfix decouvert par execution reelle - `flutter analyze`) :
+  # `^10.0.2` autorisait uniquement des versions 10.x.x, mais le code de
+  # `lib/data/share/reserve_share_service.dart` utilise l'API unifiee
+  # `SharePlus.instance.share(ShareParams(...))`, introduite seulement en
+  # version 11.0.0 (la classe `Share` + `shareXFiles` etait l'API des
+  # versions 10.x). Consequence reelle : `flutter analyze` echouait avec
+  # `Undefined name 'SharePlus'` et `The method 'ShareParams' isn't
+  # defined`, car pub resolvait la derniere version 10.x compatible
+  # (10.1.4), qui n'expose pas ces symboles. Verifie (changelog share_plus,
+  # pub.dev) : `SharePlus`/`ShareParams` sont stables sans breaking change
+  # documente jusqu'a 13.3.0 (derniere version au moment de ce correctif) ;
+  # borne volontairement a `^11.0.0` (pas `^13.0.0`) pour eviter d'importer
+  # en meme temps les nouvelles exigences Android Gradle Plugin
+  # (>=8.12.1)/Gradle wrapper (>=8.13) des versions 12.0.0+, non testees
+  # ici et hors perimetre de ce hotfix.
+  share_plus: ^11.0.0
 
   cupertino_icons: ^1.0.8
   intl: ^0.19.0
@@ -71,12 +98,28 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^4.0.0
-  riverpod_generator: ^2.4.3
   build_runner: ^2.4.12
   drift_dev: ^2.19.0
-  freezed: ^2.5.7
-  json_serializable: ^6.8.0
   mocktail: ^1.0.4
+
+  # R0.2 (hotfix decouvert par execution reelle - retour de recette R0.1) :
+  # `riverpod_generator`, `freezed`, `json_serializable` ont ete retires
+  # d'ICI (dev_dependencies, les generateurs de code) - PAS des packages
+  # `riverpod_annotation`/`freezed_annotation`/`json_annotation` eux-memes,
+  # qui restent en dependency normale ci-dessus pour un usage futur. Ces
+  # trois generateurs, aux versions initialement pinnees, embarquent un
+  # `analyzer` trop ancien (langue Dart 3.9) pour le SDK Flutter/Dart reel
+  # installe par l'utilisateur (3.47.0 / langue Dart 3.13) : `build_runner
+  # build` plantait avec `Exception: Missing implementation of
+  # visitDotShorthandPropertyAccess` en essayant d'analyser le code source
+  # du SDK Flutter lui-meme (pas notre code). Verification faite avant
+  # suppression : AUCUN fichier de ce depot n'utilise `@riverpod`, `@freezed`
+  # ni `@JsonSerializable` (grep sur lib/, zero resultat) - ces trois
+  # generateurs etaient donc presents par anticipation mais totalement
+  # inutilises, retirer leur declaration n'enleve donc aucune fonctionnalite
+  # testee. A ré-ajouter avec des versions a jour (compatibles Dart 3.13+)
+  # le jour ou du code annoté avec l'un de ces trois est reellement introduit
+  # (probable en R1+, ecrans/etat).
 
 flutter:
   uses-material-design: true

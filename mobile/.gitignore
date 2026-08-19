@@ -17,8 +17,24 @@ pubspec.lock
 *.iml
 
 # Plateformes (générées via `flutter create .` lors du premier build réel -
-# non committées tant que R0 reste un squelette Dart pur, voir README.md)
-android/
+# non committées tant que R0 reste un squelette Dart pur, voir README.md).
+#
+# EXCEPTION (R0.2, hotfix decouvert par execution reelle - voir
+# CHANGELOG.md) : deux fichiers Gradle sous android/ portent de VRAIS
+# correctifs (dependance manquante `androidx.concurrent:concurrent-
+# futures`, necessaire a la compilation du plugin `camera_android_
+# camerax` avec Gradle 9.x) qui n'ont RIEN a voir avec du boilerplate
+# regenerable - sans eux, `flutter build apk --debug` echoue a chaque
+# fois, sur N'IMPORTE QUELLE machine qui repart d'un `android/` neuf.
+# `flutter create .` ne re-genere QUE les fichiers absents (verifie par
+# execution reelle, plusieurs fois - "Wrote 3 files."), donc les committer
+# ici suffit a ce que le correctif survive a un clone/extraction propre,
+# sans avoir a le repousser manuellement a chaque fois.
+android/*
+!android/build.gradle.kts
+!android/app/
+android/app/*
+!android/app/build.gradle.kts
 ios/
 macos/
 linux/

@@ -1,7 +1,3 @@
-import 'package:drift/drift.dart';
-
-part 'app_database.g.dart';
-
 /// Schéma local - **source de vérité primaire** de l'application depuis
 /// R0.1 (pivot Local-First, voir docs/adr/0002-local-first-pivot.md).
 ///
@@ -28,11 +24,20 @@ part 'app_database.g.dart';
 /// "Upgrade N-1 -> version courante sans perte de dossier local.").
 ///
 /// Génération : `dart run build_runner build` produit `app_database.g.dart`
-/// (non committé - voir .gitignore). Nécessite le SDK Flutter/Dart, non
-/// disponible dans l'environnement ayant produit ce code ; voir
-/// `mobile/README.md`, section "Limitation connue", pour la procédure de
-/// vérification à exécuter une fois le SDK disponible.
+/// (non committé - voir .gitignore).
+///
+/// R0.2 (hotfix decouvert par execution reelle sur le poste de l'utilisateur,
+/// exactement ce que la recette demandait) : `library;` doit être la TOUTE
+/// PREMIERE directive du fichier, avant les `import`/`part` - une erreur
+/// "The library directive must appear before all other directives" a été
+/// levée par `build_runner` la première fois que ce fichier a réellement été
+/// analysé (le SDK Flutter n'était disponible dans aucun environnement au
+/// moment où ce fichier avait été écrit - voir CHANGELOG.md).
 library;
+
+import 'package:drift/drift.dart';
+
+part 'app_database.g.dart';
 
 // ---------------------------------------------------------------------------
 // Incidents
@@ -146,7 +151,13 @@ class LocalReserveTexts extends Table {
   TextColumn get incidentId => text()();
   TextColumn get templateVersion => text()();
   IntColumn get confirmedFactRevision => integer()();
-  TextColumn get text => text()();
+  // R0.2 (hotfix decouvert par execution reelle) : nommee `reserveText`, PAS
+  // `text` - un getter de colonne nomme `text` entre en collision avec la
+  // methode `Table.text()` heritee (le builder utilise pour DEFINIR une
+  // colonne texte, `text()()` ci-dessous), ce qui fait planter l'analyse
+  // statique de drift_dev : `type 'FunctionExpressionInvocationImpl' is not
+  // a subtype of type 'MethodInvocation' in type cast`. Voir CHANGELOG.md.
+  TextColumn get reserveText => text()();
   TextColumn get sha256 => text()();
   DateTimeColumn get createdAt => dateTime()();
 
