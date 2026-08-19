@@ -1,0 +1,45 @@
+# Orchestration de développement local (section 17.1 - "infra/ # Docker /
+# config déploiement"). PAS un manifeste de production : pas de secrets
+# réels ici (GATE secret, section 5.3), uniquement des identifiants de
+# développement local non sensibles.
+#
+# Usage (depuis la racine du monorepo) :
+#   docker compose -f infra/docker/docker-compose.yml up --build
+#   docker compose -f infra/docker/docker-compose.yml exec backend \
+#     python -m alembic upgrade head
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: reserveflash
+      POSTGRES_PASSWORD: reserveflash
+      POSTGRES_DB: reserveflash
+    ports:
+      - "5432:5432"
+    volumes:
+      - reserveflash_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reserveflash"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      RESERVEFLASH_ENVIRONMENT: development
+      RESERVEFLASH_DATABASE_URL: postgresql+psycopg://reserveflash:reserveflash@postgres:5432/reserveflash
+      RESERVEFLASH_AI_PROVIDER: mock
+      RESERVEFLASH_STORAGE_PROVIDER: mock
+      RESERVEFLASH_AUTH_PROVIDER: mock
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  reserveflash_pg_data:

@@ -1,0 +1,86 @@
+name: reserveflash
+description: >
+  ReserveFlash Incident - application mobile de constat de réception (cahier
+  des charges v1.0). Stack de référence section 5.1 : Flutter/Dart,
+  Riverpod, go_router, Drift, Dio.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  # section 5.1 : Android 10+ ; iOS 16+. Ces bornes sont imposées côté
+  # android/app/build.gradle (minSdkVersion) et ios/Runner/Info.plist
+  # (MinimumOSVersion), pas ici - ce fichier fixe seulement le SDK Dart.
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management (section 5.1) - "Pas de logique métier dans les widgets."
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Navigation (section 5.1) - deep links prévus pour dossiers/paywall.
+  go_router: ^14.2.0
+
+  # HTTP - timeouts, retries contrôlés, idempotency (section 5.1, 9.2).
+  dio: ^5.5.0
+
+  # Local DB - offline queue + cache incidents + migrations versionnées
+  # (section 5.1, 8.1).
+  drift: ^2.19.0
+  sqlite3_flutter_libs: ^0.5.24
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # Secure storage - tokens uniquement, jamais en clair (SEC-05).
+  flutter_secure_storage: ^9.2.2
+
+  # Caméra / audio (F02/F06/F07/F11) - la capture ne dépend jamais du réseau
+  # (section 8.1).
+  camera: ^0.11.0
+  record: ^5.1.2
+  permission_handler: ^11.3.1
+
+  # Icônes Material Symbols cohérentes (section 4.5).
+  material_symbols_icons: ^4.2719.3
+
+  # Partage natif du PDF exporté (F14).
+  share_plus: ^10.0.2
+
+  cupertino_icons: ^1.0.8
+  intl: ^0.19.0
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+  uuid: ^4.4.2
+
+  # R0.1 (Local-First) - sha256 des faits/réserves/pièces jointes (section 3,
+  # 6.1) ; le Reserve Composer déterministe tourne désormais sur l'appareil
+  # (voir lib/domain/reserve_composer.dart) et doit produire le même hash
+  # qu'un futur recalcul serveur (comparabilité, section 6.1).
+  crypto: ^3.0.3
+  # R0.1 (point 9 - "Export mes données / Sauvegarde ReserveFlash") - format
+  # de sauvegarde versionné = archive zip contenant la base + les pièces
+  # jointes locales (voir docs/adr/0002-local-first-pivot.md).
+  archive: ^3.6.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+
+  flutter_lints: ^4.0.0
+  riverpod_generator: ^2.4.3
+  build_runner: ^2.4.12
+  drift_dev: ^2.19.0
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
+  # Polices système par plateforme (section 4.3 : Roboto Android / SF Pro
+  # iOS) - aucune police embarquée, donc aucune dépendance réseau pour la
+  # typographie et aucune entrée `fonts:` ici.
+  assets: []

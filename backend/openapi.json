@@ -1,0 +1,488 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ReserveFlash Incident API",
+    "description": "API backend de ReserveFlash Incident (cahier des charges v1.0 + modification corrective R0.1 Local-First, voir docs/adr/0002-local-first-pivot.md). Environnement: development. Le rôle primaire de cette API est app/api/routes/ai.py (proxy IA sans état). app/api/routes/incidents.py est un chemin optionnel/futur (usage cloud), non requis pour l'app mobile V1, et non monté par défaut depuis R0.2 (enable_legacy_cloud_incident_api=False).",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/config": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Get Config",
+        "operationId": "get_config_v1_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ai/transcribe": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Transcribe Audio",
+        "description": "F06/F11 (section 2.1) - transcrit un extrait audio. Ne persiste rien :\nl'app mobile est responsable de conserver le résultat localement (Drift,\nvoir LocalCandidateFactSets).",
+        "operationId": "transcribe_audio_v1_ai_transcribe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscribeAudioRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscribeAudioResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ai/extract": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Extract Candidate Facts",
+        "description": "F07/F08 (section 2.1) - extrait un `CandidateFactData` structuré à\npartir d'un texte déjà transcrit/OCRisé. Le résultat DOIT ensuite passer\npar la revue utilisateur (F09) puis\n`lib/domain/liability_guard.dart`/`app/domain/liability_guard.py` avant\nde pouvoir devenir un `ConfirmedFactData` - jamais directement utilisable\npar un Reserve Composer (GATE zéro invention, ADR 0001).",
+        "operationId": "extract_candidate_facts_v1_ai_extract_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractCandidateFactsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractCandidateFactsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CandidateFactData": {
+        "properties": {
+          "issue_type_candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IssueType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fields": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CandidateField"
+            },
+            "type": "object",
+            "title": "Fields"
+          },
+          "requires_review": {
+            "type": "boolean",
+            "title": "Requires Review"
+          },
+          "clarification_question_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Question Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "issue_type_candidate",
+          "fields",
+          "requires_review"
+        ],
+        "title": "CandidateFactData",
+        "description": "Correspond a schemas/candidate_fact_set.v1.schema.json. Sortie brute du\npipeline IA (section 7.2, etapes 1 a 4). Ne DOIT jamais etre utilisee comme\nentree du Reserve Composer."
+      },
+      "CandidateField": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "source": {
+            "$ref": "#/components/schemas/FactSource"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/ConfidenceLevel"
+          },
+          "ambiguous": {
+            "type": "boolean",
+            "title": "Ambiguous",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value",
+          "source",
+          "confidence"
+        ],
+        "title": "CandidateField"
+      },
+      "ConfidenceLevel": {
+        "type": "string",
+        "enum": [
+          "HIGH",
+          "MEDIUM",
+          "LOW",
+          "AMBIGUOUS"
+        ],
+        "title": "ConfidenceLevel"
+      },
+      "ConfigResponse": {
+        "properties": {
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "reserve_template_version": {
+            "type": "string",
+            "title": "Reserve Template Version"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "schema_version_confirmed": {
+            "type": "string",
+            "title": "Schema Version Confirmed"
+          },
+          "schema_version_candidate": {
+            "type": "string",
+            "title": "Schema Version Candidate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "environment",
+          "reserve_template_version",
+          "prompt_version",
+          "schema_version_confirmed",
+          "schema_version_candidate"
+        ],
+        "title": "ConfigResponse"
+      },
+      "ExtractCandidateFactsRequest": {
+        "properties": {
+          "document_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Text"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prompt_version"
+        ],
+        "title": "ExtractCandidateFactsRequest",
+        "description": "R0.1 (points 4/5/14) - route SANS ÉTAT : `document_text`/`transcript`\nsont déjà des textes (OCR/transcription), jamais des images/audio bruts\nenvoyés \"au cas où\". Voir docs/security.md pour le détail de ce qui est\net n'est jamais transmis au provider IA."
+      },
+      "ExtractCandidateFactsResponse": {
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/CandidateFactData"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "title": "Latency Ms"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidate",
+          "provider",
+          "model_id",
+          "prompt_version",
+          "schema_version",
+          "latency_ms"
+        ],
+        "title": "ExtractCandidateFactsResponse"
+      },
+      "FactSource": {
+        "type": "string",
+        "enum": [
+          "OCR",
+          "VOICE_TRANSCRIPT",
+          "TEXT_INPUT",
+          "LLM_NORMALIZATION"
+        ],
+        "title": "FactSource",
+        "description": "Origine d'un champ candidat (schema CandidateFactSet)."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse"
+      },
+      "IssueType": {
+        "type": "string",
+        "enum": [
+          "PACKAGING_DAMAGE",
+          "PRODUCT_DAMAGE",
+          "MISSING_QTY",
+          "WRONG_QTY",
+          "WRONG_PRODUCT",
+          "VISIBLE_NONCONFORMITY",
+          "OTHER"
+        ],
+        "title": "IssueType",
+        "description": "Types d'anomalie declarables (F05, section 2.1)."
+      },
+      "TranscribeAudioRequest": {
+        "properties": {
+          "audio_base64": {
+            "type": "string",
+            "title": "Audio Base64"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "audio_base64",
+          "mime_type"
+        ],
+        "title": "TranscribeAudioRequest",
+        "description": "R0.1 (points 4/5/14) - route SANS ÉTAT (app/api/routes/ai.py) : ne\nréférence aucun incident/organisation. `audio_base64` doit contenir\nUNIQUEMENT l'extrait audio strictement nécessaire à l'opération demandée\n(ex: une note vocale ponctuelle), jamais un enregistrement complet non\npertinent - c'est à l'app mobile de garantir cette minimisation avant\nl'appel (voir docs/security.md)."
+      },
+      "TranscribeAudioResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "title": "Latency Ms"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "provider",
+          "model_id",
+          "latency_ms"
+        ],
+        "title": "TranscribeAudioResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

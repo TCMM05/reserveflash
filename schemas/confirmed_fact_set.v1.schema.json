@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reserveflash.app/schemas/confirmed_fact_set.v1.schema.json",
+  "title": "ConfirmedFactSet",
+  "description": "Jeu de faits canonique, verrouille pour un Issue donne. Compose exclusivement a partir de ce schema (section 6.2 du cahier des charges). Aucun champ ne doit etre alimente directement par la sortie brute du LLM : seule une valeur validee par l'utilisateur peut peupler ce schema (GATE zero invention, section 2.4).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["issue_type", "user_uncertainty", "unknown_fields", "user_confirmed"],
+  "properties": {
+    "issue_type": {
+      "type": "string",
+      "enum": [
+        "PACKAGING_DAMAGE",
+        "PRODUCT_DAMAGE",
+        "MISSING_QTY",
+        "WRONG_QTY",
+        "WRONG_PRODUCT",
+        "VISIBLE_NONCONFORMITY",
+        "OTHER"
+      ]
+    },
+    "product_label": { "type": ["string", "null"] },
+    "product_reference": { "type": ["string", "null"] },
+    "expected_quantity": { "type": ["number", "null"], "minimum": 0 },
+    "received_quantity": { "type": ["number", "null"], "minimum": 0 },
+    "affected_quantity": { "type": ["number", "null"], "minimum": 0 },
+    "packaging_condition": { "type": ["string", "null"] },
+    "product_condition": { "type": ["string", "null"] },
+    "location_on_item": { "type": ["string", "null"] },
+    "user_uncertainty": {
+      "type": "boolean",
+      "description": "true si l'utilisateur a explicitement marque une incertitude residuelle sur ce jeu de faits."
+    },
+    "unknown_fields": {
+      "type": "array",
+      "description": "Noms des champs explicitement marques UNKNOWN par l'utilisateur (valeur valide, jamais silencieusement resolue - section 2.3).",
+      "items": { "type": "string" }
+    },
+    "user_confirmed": {
+      "const": true,
+      "description": "Invariant 6.3 : doit toujours etre true avant toute generation de reserve. Un ConfirmedFactSet avec user_confirmed=false ne doit jamais exister en base."
+    }
+  },
+  "$comment": "missing_quantity (expected - received) est volontairement absente de ce schema : additionalProperties=false l'interdit. Elle est calculee par code au moment de la composition, jamais ecrite par le LLM ni par l'utilisateur (invariant 6.3)."
+}

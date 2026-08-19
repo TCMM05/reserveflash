@@ -1,0 +1,31 @@
+# Flutter/Dart standard
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+pubspec.lock
+
+# Fichiers générés (build_runner: drift, freezed, json_serializable, riverpod_generator)
+*.g.dart
+*.freezed.dart
+
+# IDE
+.idea/
+*.iml
+
+# Plateformes (générées via `flutter create .` lors du premier build réel -
+# non committées tant que R0 reste un squelette Dart pur, voir README.md)
+android/
+ios/
+macos/
+linux/
+windows/
+web/
+
+# Secrets locaux
+.env
+.env.*
+!.env.example

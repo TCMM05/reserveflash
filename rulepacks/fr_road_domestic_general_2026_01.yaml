@@ -1,0 +1,38 @@
+# RulePack d'exemple (section 11.2 du cahier des charges).
+#
+# GATE section 11.1 : "Les règles juridiques ou contractuelles ne doivent
+# jamais être stockées dans un prompt. Elles sont décrites dans des
+# fichiers/version DB RulePack, avec source, juridiction, mode de transport,
+# périmètre, date d'effet, version et état d'activation."
+#
+# status: DISABLED_PENDING_LEGAL_REVIEW - ce pack n'est PAS actif. Il ne doit
+# être activé (status: ACTIVE) qu'après validation métier/juridique explicite
+# (section 1.4, 11.3 : "Aucun rule pack n'est sélectionné automatiquement à
+# partir d'une supposition du LLM"). Toute modification de ce fichier suit la
+# politique de changement section 18.1 : source + reviewer + effective date +
+# tests avant merge.
+
+rule_pack_id: FR_ROAD_DOMESTIC_GENERAL_2026_01
+jurisdiction: FR
+transport_mode: ROAD
+scope: DOMESTIC_GENERAL_CONTRACT_TYPE
+status: DISABLED_PENDING_LEGAL_REVIEW
+source_title: "Code des transports - contrat type général"
+source_url: "https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000043864485"
+effective_from: null # renseigné uniquement lors de l'activation validée
+version: 1
+
+# `rules` reste volontairement vide/indicatif tant que status !=
+# ACTIVE. Un rappel (Reminder, section 6.1) ne peut référencer ce rule_pack_id
+# que si son status est ACTIVE au moment de l'évaluation (section 11.3 :
+# "Si un rule pack validé est activé, les rappels affichent la source et la
+# version.").
+rules: []
+
+review:
+  reviewer: null # nom du relecteur métier/juridique, renseigné à l'activation
+  reviewed_at: null
+  legal_notes: >
+    Pack non activé pour la release 1.0. Le moteur de constat (F01-F13)
+    fonctionne intégralement sans lui (section 11.3 : "Le moteur de constat
+    fonctionne même si aucun rule pack juridique n'est activé.").

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reserveflash.app/schemas/candidate_fact_set.v1.schema.json",
+  "title": "CandidateFactSet",
+  "description": "Sortie structuree brute du pipeline IA (transcription + extraction, section 7.2 etapes 1-4). Jamais utilisee directement pour composer une reserve (GATE zero invention). Doit passer par l'ecran de revue (F09, S11) et etre reecrite en ConfirmedFactSet apres validation humaine avant de pouvoir servir au Reserve Composer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["issue_type_candidate", "fields", "requires_review"],
+  "properties": {
+    "issue_type_candidate": {
+      "type": ["string", "null"],
+      "enum": [
+        "PACKAGING_DAMAGE",
+        "PRODUCT_DAMAGE",
+        "MISSING_QTY",
+        "WRONG_QTY",
+        "WRONG_PRODUCT",
+        "VISIBLE_NONCONFORMITY",
+        "OTHER",
+        null
+      ]
+    },
+    "fields": {
+      "type": "object",
+      "description": "Une entree par champ candidat. Chaque champ porte sa propre confiance et son origine ; aucune ecriture directe dans un ConfirmedFactSet n'est permise (section 7.1).",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["value", "source", "confidence"],
+        "properties": {
+          "value": {},
+          "source": {
+            "type": "string",
+            "enum": ["OCR", "VOICE_TRANSCRIPT", "TEXT_INPUT", "LLM_NORMALIZATION"]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["HIGH", "MEDIUM", "LOW", "AMBIGUOUS"]
+          },
+          "ambiguous": { "type": "boolean", "default": false }
+        }
+      }
+    },
+    "requires_review": {
+      "type": "boolean",
+      "description": "true si au moins un champ critique pour issue_type_candidate est absent, AMBIGUOUS ou en contradiction entre sources (regle UX 2.3)."
+    },
+    "clarification_question_id": {
+      "type": ["string", "null"],
+      "description": "Reference a une question du catalogue controle (section 7.1), jamais une question generee librement par le LLM."
+    }
+  }
+}
