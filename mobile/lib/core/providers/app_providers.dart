@@ -11,6 +11,15 @@ library;
 
 import 'dart:io';
 
+// R1 (bug decouvert par execution reelle - `flutter analyze`/`flutter test`) :
+// `LazyDatabase` vit dans `package:drift/drift.dart` (le coeur de drift),
+// PAS dans `package:drift/native.dart` (qui n'expose que `NativeDatabase`,
+// specifique a l'implementation native/desktop/mobile) - les deux imports
+// sont necessaires ici. Sans risque de collision `isNotNull`/`isNull` avec
+// `flutter_test` (voir la mise en garde dans
+// test/data/local_incident_repository_test.dart) car ce fichier n'importe
+// pas `flutter_test`.
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;

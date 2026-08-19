@@ -207,7 +207,7 @@ class _PermissionDeniedView extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: RfSpacing.lg),
-          FilledButton(onPressed: openAppSettings, child: const Text('Ouvrir les réglages')),
+          const FilledButton(onPressed: openAppSettings, child: Text('Ouvrir les réglages')),
           const SizedBox(height: RfSpacing.xs),
           TextButton(
             onPressed: onCancel,
