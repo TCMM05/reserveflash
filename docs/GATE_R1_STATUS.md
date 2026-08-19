@@ -148,9 +148,8 @@ l'app en "Non restreint" dans les réglages de batterie. Aucun des deux
 points n'est un défaut du code livré ; ils sont documentés ici par souci
 de traçabilité complète du parcours de validation.
 
-Le tag `r1-candidate` sera créé sur le commit qui inclut cette mise à jour
-documentaire, une fois celle-ci finalisée (voir section "Prochaines étapes
-avant recette" ci-dessous).
+Le tag `r1-candidate` a été créé sur le commit qui inclut cette mise à jour
+documentaire (voir `git log`/`git tag -n1 r1-candidate`).
 
 ## Risque explicitement documenté : capture audio locale (`record`)
 
@@ -231,9 +230,10 @@ la recette indépendante (voir section suivante).
    fermeture/réouverture avec persistance intacte, refus de permission
    caméra géré sans crash, suppression avec confirmation, correction des
    informations).
-4. Tag `r1-candidate` : à créer sur le commit qui inclut cette mise à jour
-   documentaire, puis livraison complète (ZIP, APK, SHA-256, captures
-   d'écran, `CHANGELOG.md`, ce document).
+4. ~~Tag `r1-candidate`~~ **FAIT** - créé sur le commit qui inclut cette
+   mise à jour documentaire. Reste : assembler la livraison complète (ZIP,
+   APK, SHA-256, captures d'écran, `CHANGELOG.md`, ce document) pour la
+   recette indépendante.
 5. La décision PASS/FAIL du Gate R1 revient à la recette indépendante, pas
    à ce document ni à son auteur - ce document se limite à livrer les
    preuves ci-dessus.
