@@ -30,7 +30,6 @@
 //    écrans n'importe `package:dio` ni aucun client HTTP - mêmes grep que
 //    R1-T10 initial), vérifié aussi manuellement (GATE_R1_STATUS.md).
 
-import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -87,35 +86,46 @@ LocalIncidentRepository _repositoryFor(AppDatabase db, Directory evidenceDocsDir
 // et de nombreux rapports similaires (ex. flutter/flutter#97737). Solution
 // officielle : laisser tourner le vrai event loop brièvement via
 // `runAsync()` avant de reprendre le pump normal.
-// Diagnostic temporaire (à retirer une fois la cause réelle du blocage
-// identifiée) : le correctif `runAsync` ci-dessus documenté officiellement
-// n'a PAS suffi lors du passage réel sur poste (même blocage exact malgré
-// ce correctif). Plutôt que deviner une nouvelle hypothèse à l'aveugle,
-// chaque étape suspecte est désormais bornée par un timeout court et
-// identifiée par un message explicite - un blocage silencieux de plusieurs
-// minutes devient une `TimeoutException` en quelques secondes, avec le nom
-// exact de l'étape responsable.
-Future<T> withTimeout<T>(Future<T> future, String label) {
-  // ignore: avoid_print
-  print('DIAGNOSTIC >>> début : $label');
-  return future.timeout(
-    const Duration(seconds: 8),
-    onTimeout: () => throw TimeoutException('DIAGNOSTIC : BLOQUÉ ICI -> $label'),
-  ).then((T value) {
-    // ignore: avoid_print
-    print('DIAGNOSTIC >>> terminé : $label');
-    return value;
-  });
+// Diagnostic temporaire v2 (à retirer une fois la cause réelle du blocage
+// identifiée) : v1 (print() + Future.timeout()) n'a RIEN affiché du tout -
+// aucune ligne DIAGNOSTIC, et le test a quand même couru jusqu'au timeout
+// par défaut du binding de test (~5 minutes, "did not complete"), preuve
+// que ni le print() (mis en mémoire tampon par le runner de test tant que
+// le test ne "termine" pas normalement) ni le Timer de Future.timeout() ne
+// se déclenchent dans ce contexte bloqué. On abandonne ces deux mécanismes
+// et on écrit à la place, de façon 100% synchrone et immédiatement forcée
+// sur disque (`flush: true`), une trace dans un vrai fichier - un simple
+// appel bloquant `writeAsStringSync`, indépendant de tout Timer/Future/
+// zone de test, qui persiste même si le processus est ensuite tué. Inutile
+// d'attendre le timeout du framework : dès que le fichier arrête de
+// grossir, l'étape en cours est celle qui bloque.
+final File _diagLogFile = File(
+  '${Directory.systemTemp.path}${Platform.pathSeparator}reserveflash_diag.log',
+);
+
+void logStep(String label) {
+  _diagLogFile.writeAsStringSync(
+    '${DateTime.now().toIso8601String()} $label\n',
+    mode: FileMode.append,
+    flush: true,
+  );
+}
+
+Future<T> traced<T>(Future<T> future, String label) async {
+  logStep('DEBUT $label');
+  final T result = await future;
+  logStep('FIN   $label');
+  return result;
 }
 
 Future<void> settleWithRealIo(WidgetTester tester) async {
-  await withTimeout(
+  await traced(
     tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }),
     'settleWithRealIo -> runAsync(delay 50ms)',
   );
-  await withTimeout(tester.pumpAndSettle(), 'settleWithRealIo -> pumpAndSettle (après runAsync)');
+  await traced(tester.pumpAndSettle(), 'settleWithRealIo -> pumpAndSettle (après runAsync)');
 }
 
 Future<void> _cleanupTempDir(Directory dir) async {
@@ -201,11 +211,26 @@ void main() {
   group('Correction R1 - visionneuse photo : ouverture plein écran', () {
     testWidgets('un tap sur une vignette photo disponible ouvre la visionneuse plein écran',
         (WidgetTester tester) async {
+      // Log réinitialisé au début de ce test précis (celui qui bloque de
+      // façon reproductible) - chemin affiché explicitement pour pouvoir le
+      // retrouver facilement sur le poste Windows.
+      if (_diagLogFile.existsSync()) {
+        _diagLogFile.deleteSync();
+      }
+      logStep('=== DEBUT DU TEST === (fichier log : ${_diagLogFile.path})');
+
+      logStep('DEBUT repository.createIncident');
       final domain.Incident incident = await repository.createIncident(
         occurredAt: DateTime.utc(2026, 8, 19, 8),
       );
+      logStep('FIN   repository.createIncident');
+
+      logStep('DEBUT ecriture fichier photo source');
       final File source = File('${sourceDir.path}/photo.png')
         ..writeAsBytesSync(_validPngBytes, flush: true);
+      logStep('FIN   ecriture fichier photo source');
+
+      logStep('DEBUT storage.captureFromFile');
       final domain.EvidenceAsset asset = await storage.captureFromFile(
         incidentId: incident.id,
         sourcePath: source.path,
@@ -213,10 +238,14 @@ void main() {
         mimeType: 'image/png',
         extension: 'png',
       );
+      logStep('FIN   storage.captureFromFile');
+
+      logStep('DEBUT repository.registerEvidenceAsset');
       await repository.registerEvidenceAsset(asset);
+      logStep('FIN   repository.registerEvidenceAsset');
 
       bool opened = false;
-      await withTimeout(
+      await traced(
         tester.pumpWidget(
           wrap(
             Builder(
@@ -241,10 +270,10 @@ void main() {
         ),
         'test1 -> pumpWidget (vignette)',
       );
-      await withTimeout(settleWithRealIo(tester), 'test1 -> settle #1 (après pumpWidget vignette)');
+      await traced(settleWithRealIo(tester), 'test1 -> settle #1 (après pumpWidget vignette)');
 
-      await withTimeout(tester.tap(find.byType(ListTile)), 'test1 -> tap(ListTile)');
-      await withTimeout(settleWithRealIo(tester), 'test1 -> settle #2 (après tap)');
+      await traced(tester.tap(find.byType(ListTile)), 'test1 -> tap(ListTile)');
+      await traced(settleWithRealIo(tester), 'test1 -> settle #2 (après tap)');
 
       expect(opened, isTrue);
       expect(find.byType(EvidencePhotoViewerScreen), findsOneWidget);
