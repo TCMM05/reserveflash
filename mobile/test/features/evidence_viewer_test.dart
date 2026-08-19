@@ -73,6 +73,26 @@ LocalIncidentRepository _repositoryFor(AppDatabase db, Directory evidenceDocsDir
   );
 }
 
+// Bug réel révélé par `flutter test` sur poste (pas seulement un test lent) :
+// `EvidenceThumbnailTile` et `EvidencePhotoViewerScreen` font toutes deux
+// décoder une vraie image sur disque via `Image.file` pour un asset
+// `available` - ce n'est PAS un canal de plateforme (contrairement à
+// caméra/audio), mais une vraie opération asynchrone `dart:io`. Le binding
+// de `flutter test` pompe les widgets dans une zone à horloge simulée : un
+// simple `pumpAndSettle()` ne suffit pas à laisser cette lecture réelle se
+// terminer et le test reste bloqué indéfiniment ("did not complete"),
+// comme documenté officiellement par `WidgetTester.runAsync`
+// (https://api.flutter.dev/flutter/flutter_test/WidgetTester/runAsync.html)
+// et de nombreux rapports similaires (ex. flutter/flutter#97737). Solution
+// officielle : laisser tourner le vrai event loop brièvement via
+// `runAsync()` avant de reprendre le pump normal.
+Future<void> settleWithRealIo(WidgetTester tester) async {
+  await tester.runAsync(() async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  });
+  await tester.pumpAndSettle();
+}
+
 Future<void> _cleanupTempDir(Directory dir) async {
   if (!await dir.exists()) {
     return;
@@ -193,10 +213,10 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await settleWithRealIo(tester);
 
       await tester.tap(find.byType(ListTile));
-      await tester.pumpAndSettle();
+      await settleWithRealIo(tester);
 
       expect(opened, isTrue);
       expect(find.byType(EvidencePhotoViewerScreen), findsOneWidget);
@@ -245,7 +265,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await settleWithRealIo(tester);
 
       expect(find.byType(InteractiveViewer), findsOneWidget);
       expect(find.textContaining('introuvable'), findsNothing);
@@ -280,7 +300,7 @@ void main() {
       await tester.pumpWidget(
         wrap(EvidencePhotoViewerScreen(incidentId: incident.id, asset: missingAsset)),
       );
-      await tester.pumpAndSettle();
+      await settleWithRealIo(tester);
 
       expect(find.textContaining('introuvable'), findsOneWidget);
       expect(find.byType(InteractiveViewer), findsNothing);
@@ -313,7 +333,7 @@ void main() {
       await tester.pumpWidget(
         wrap(EvidencePhotoViewerScreen(incidentId: incident.id, asset: corruptedAsset)),
       );
-      await tester.pumpAndSettle();
+      await settleWithRealIo(tester);
 
       expect(find.textContaining('corrompu'), findsOneWidget);
       expect(find.byType(InteractiveViewer), findsNothing);
@@ -339,14 +359,14 @@ void main() {
       await tester.pumpWidget(
         wrapPushed(EvidencePhotoViewerScreen(incidentId: incident.id, asset: asset)),
       );
-      await tester.pumpAndSettle();
+      await settleWithRealIo(tester);
 
       await tester.tap(find.byIcon(Icons.delete_outline));
-      await tester.pumpAndSettle();
+      await settleWithRealIo(tester);
       expect(find.text('Supprimer cette photo ?'), findsOneWidget);
 
       await tester.tap(find.text('Supprimer'));
-      await tester.pumpAndSettle();
+      await settleWithRealIo(tester);
 
       expect(await File(asset.localFilePath).exists(), isFalse);
       expect(await repository.listEvidenceAssets(incident.id), isEmpty);
