@@ -131,6 +131,63 @@ indépendante à mener. Aucune fonctionnalité R2 n'a été développée.
   bootstrap réel sur le poste de l'utilisateur, voir `mobile/README.md`).
   **Ne pas considérer R1 validée avant ce bootstrap réel.**
 
+### Mise à jour - bootstrap réel effectué (même jour)
+
+Le bootstrap ci-dessus a été réalisé pour de vrai sur le poste Windows de
+l'utilisateur, avec 3 bugs réels trouvés et corrigés (méthode "vagues"
+identique à R0) :
+
+- Import manquant `package:drift/drift.dart` (`LazyDatabase` n'est pas
+  exporté par `package:drift/native.dart`) - commit `cd1be3b`.
+- Lint `prefer_const_constructors` - même commit.
+- `flutter build apk --debug` : "Build failed due to use of deleted
+  Android v1 embedding" - causé par un dossier `android/` incomplet sur ce
+  poste (`AndroidManifest.xml`/`MainActivity` absents), pas par le code R1
+  lui-même. Corrigé par `flutter create . --org com.reserveflash
+  --platforms=android,ios` puis restauration ciblée des deux fichiers
+  Gradle protégés du correctif CameraX R0.2
+  (`git checkout -- android/app/build.gradle.kts
+  android/build.gradle.kts`, vérifiés non modifiés par `flutter create`).
+
+Résultat final, confirmé deux fois (poste utilisateur + CI GitHub Actions
+sur runner Ubuntu propre, commits `cd1be3b` et `e18980c`, CI #5/#6 vertes) :
+`flutter analyze` 0 erreur/0 info, `flutter test` **61/61 verts** (dont
+l'intégralité de `r1_capture_offline_test.dart`), APK debug construit
+(185 591 137 octets, SHA-256
+`f353d6e1cc2e8c751574769f19d789274c22747d7aadf68cd8df2a79f9f7dea5`). Le
+risque documenté du plugin `record: ^7.1.1` ne s'est PAS matérialisé.
+
+### Mise à jour - parcours manuel réel sur appareil Android effectué (même jour)
+
+Le parcours manuel sur un vrai téléphone (seul point restant après le
+bootstrap ci-dessus) a été déroulé pour de vrai sur un Samsung Galaxy A51
+(`SM-A515F`), mode avion actif de bout en bout : installation de l'APK,
+création d'un incident réel, photo du BL, sélection du type de problème,
+capture guidée de 3 photos de preuve, description texte + note vocale,
+écran de clôture du dossier ("Dossier terminé"), fermeture complète de
+l'application puis réouverture avec le dossier et toutes ses preuves
+intacts (BL, 3 photos, note vocale, commentaire, type de problème),
+refus de permission caméra affichant l'écran contrôlé prévu (aucun
+crash, aucune perte de dossier), suppression avec dialogue de
+confirmation ("Supprimer tout le dossier ?"), et correction des
+informations via le formulaire dédié. Détail complet, écran par écran,
+dans `docs/GATE_R1_STATUS.md` (section "Parcours manuel réel sur appareil
+Android - preuve obtenue").
+
+Deux points environnementaux (non liés au code livré) ont retardé ce
+diagnostic et sont documentés par souci de traçabilité dans
+`docs/GATE_R1_STATUS.md` : un dossier de projet dupliqué non suivi par git
+sur le poste de l'utilisateur (contenant du code R0 obsolète) a été testé
+par erreur avant identification du bon dépôt, et la gestion de batterie
+Samsung ("Optimisé"/veille des apps récemment installées) retardait le
+premier lancement à froid par l'icône - résolu en passant l'app en "Non
+restreint" dans les réglages de batterie.
+
+**Toutes les preuves attendues pour le Gate R1 sont désormais réunies.
+Conformément à la demande corrective, cette entrée ne déclare PAS R1
+PASS : la décision revient exclusivement à la recette indépendante - voir
+`docs/GATE_R1_STATUS.md`.**
+
 ## [0.1.5] - R0.2.3 Freeze documentaire/traçabilité - 2026-08-19
 
 R0.2.2 étant techniquement validée (CI GitHub Actions réelle et verte,

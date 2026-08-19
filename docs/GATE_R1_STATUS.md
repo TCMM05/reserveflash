@@ -1,11 +1,14 @@
 # Statut Gate R1 - "Capture Offline"
 
-**Statut : NON VALIDÉ.** Ce document liste les preuves livrées avec la
-version candidate R1 et ce qu'il reste à vérifier. Conformément à la
-demande corrective ("ne pas déclarer R1 PASS vous-même : livrer les preuves
-et laisser la recette indépendante décider"), **aucune section de ce
-document n'affirme que le Gate R1 est atteint** - c'est à la recette
-indépendante de le constater sur un vrai appareil.
+**Statut : PREUVES COMPLÈTES, EN ATTENTE DE RECETTE INDÉPENDANTE.** Ce
+document liste les preuves livrées avec la version candidate R1, y compris
+désormais le parcours manuel complet déroulé sur un vrai téléphone Android
+(voir "Parcours manuel réel sur appareil Android" ci-dessous). Conformément
+à la demande corrective ("ne pas déclarer R1 PASS vous-même : livrer les
+preuves et laisser la recette indépendante décider"), **aucune section de
+ce document n'affirme que le Gate R1 est validé** - toutes les preuves
+factuelles sont réunies, mais le verdict PASS/FAIL revient exclusivement à
+la recette indépendante, pas à ce document ni à son auteur.
 
 ## Rappel du Gate R1 (critère d'acceptation, verbatim de la demande)
 
@@ -39,22 +42,115 @@ En résumé :
   mémoire), couvrant R1-T01/T02/T03/T04/T05/T07/T08.
 - Tous les tests R0 existants sont conservés inchangés.
 
-## Ce qui N'A PAS encore été fait (honnêteté de livraison)
+## Exécution réelle - mise à jour (bootstrap effectué)
 
-- **Aucune exécution réelle du SDK Flutter** n'a eu lieu au moment de la
-  rédaction de ce document. Ce contexte de développement ne dispose pas du
-  SDK Flutter (même limitation que pour R0, déjà documentée à plusieurs
-  reprises dans `docs/GATE_R0.1_STATUS.md`) : ni `flutter analyze`, ni
-  `flutter test`, ni `flutter build apk --debug` n'ont pu être lancés ici.
-  **C'est le prochain bloquant avant toute recette** - voir
-  `mobile/README.md`, section "Bootstrap", pour la procédure déjà éprouvée
-  sur ce projet (R0.1/R0.2/R0.2.1).
-- Aucun APK n'a donc encore été produit pour cette version candidate.
-- Aucune capture d'écran ni vidéo du parcours réel n'a pu être produite
-  (nécessite l'exécution ci-dessus sur un vrai téléphone).
-- La CI GitHub Actions n'a pas encore tourné sur le commit R1 (le commit/
-  tag `r1-candidate` n'existe pas encore au moment de la rédaction de ce
-  document).
+Contrairement à la première version de ce document (rédigée avant tout
+bootstrap réel, section historique conservée ci-dessous par transparence),
+le bootstrap complet a maintenant été exécuté RÉELLEMENT, à deux reprises
+indépendantes : sur le poste Windows de l'utilisateur, puis confirmé par
+la CI GitHub Actions sur un runner Ubuntu propre (donc sur deux
+environnements différents, ce qui renforce la preuve).
+
+- **`flutter analyze`** : **0 erreur, 0 info.** (Deux bugs réels trouvés et
+  corrigés au premier passage : import manquant de `LazyDatabase` -
+  `package:drift/drift.dart`, pas `package:drift/native.dart` ; et un lint
+  `prefer_const_constructors`. Voir commit `cd1be3b`.)
+- **`flutter test`** : **61/61 tests verts**, y compris l'intégralité de
+  `test/data/r1_capture_offline_test.dart` (R1-T01/T02/T03/T04/T05/T07/T08)
+  et tous les tests R0 existants (zéro régression confirmée par exécution,
+  pas seulement par lecture de code).
+- **`flutter build apk --debug`** : **réussi.** APK produit :
+  `app-debug.apk`, 185 591 137 octets, SHA-256
+  `f353d6e1cc2e8c751574769f19d789274c22747d7aadf68cd8df2a79f9f7dea5`.
+  - Bug réel trouvé et corrigé au passage : "Build failed due to use of
+    deleted Android v1 embedding" - causé par un dossier `android/`
+    incomplet sur le poste de l'utilisateur (`AndroidManifest.xml` et
+    `MainActivity` absents, seuls les deux fichiers Gradle corrigés en
+    R0.2 étaient présents/committés). Corrigé par `flutter create .
+    --org com.reserveflash --platforms=android,ios` suivi d'une
+    restauration ciblée des deux fichiers Gradle protégés
+    (`git checkout -- android/app/build.gradle.kts
+    android/build.gradle.kts`) pour ne pas perdre le correctif CameraX de
+    R0.2 - vérifié : ces deux fichiers n'ont d'ailleurs pas été touchés
+    par `flutter create .` cette fois (déjà présents).
+  - Risque documenté du plugin `record: ^7.1.1` (voir section dédiée
+    ci-dessous) : **ne s'est PAS matérialisé** - compile et build sans
+    erreur liée à `record` sur les deux environnements testés.
+- **CI GitHub Actions** : **verte, deux fois de suite**, sur un runner
+  propre (donc indépendamment du poste Windows de l'utilisateur) :
+  - Run CI #5, commit `cd1be3b` ("R1 hotfix... import LazyDatabase
+    manquant + lint const") : vert, 8m11s.
+  - Run CI #6, commit `e18980c` ("R1 bootstrap reel : exclusions analyzer
+    plateforme + pubspec.lock/.metadata regeneres") : vert, 7m47s.
+
+## Parcours manuel réel sur appareil Android - preuve obtenue
+
+Le parcours manuel décrit dans le rappel du Gate R1 (en tête de ce
+document) a été exécuté **réellement, sur un vrai téléphone Android**
+(Samsung Galaxy A51, modèle `SM-A515F`, connecté en USB, `flutter run` en
+mode debug puis vérifié aussi via lancement normal par l'icône - APK
+installé, pas une simulation), avec le mode avion activé pendant tout le
+parcours de capture. Captures d'écran collectées à chaque étape.
+
+Déroulé confirmé, dans l'ordre :
+
+1. **Accueil → Nouvelle réception problématique** : ouverture normale,
+   formulaire "Nouvel incident" (Fournisseur/Transporteur optionnels).
+2. **Photo du bon de livraison** : permission caméra demandée au point
+   d'usage, autorisée, vraie photo prise avec l'appareil photo du
+   téléphone (pas un simulateur), enregistrée avec vignette visible.
+3. **Type(s) de problème** : sélection ("Emballage endommagé") confirmée.
+4. **3 photos de preuves guidées** : prises et enregistrées, vignettes
+   visibles dans le dossier.
+5. **Description texte + note vocale** : commentaire texte saisi et
+   conservé ; note vocale enregistrée et listée dans les preuves du
+   dossier ("Enregistrée sur cet appareil") - le risque documenté sur
+   `record: ^7.1.1` (voir section dédiée ci-dessous) ne s'est pas
+   matérialisé, y compris à l'usage réel.
+6. **Dossier terminé** : écran de confirmation "Dossier enregistré -
+   Toutes les informations et preuves sont sauvegardées sur cet appareil,
+   sans connexion requise. Vous pouvez fermer l'application en toute
+   sécurité : le dossier sera intact à la réouverture."
+7. **Fermeture complète + réouverture (R1-T02/R1-T05, mode avion actif)** :
+   application totalement fermée (balayée hors des apps récentes) puis
+   rouverte par l'icône. Le dossier est retrouvé identique : BL, 3 photos
+   de preuves, note vocale, commentaire, type de problème - toutes les
+   vignettes s'affichent correctement, aucune perte, aucun crash.
+8. **Refus de permission caméra (R1-T06)** : sur un nouvel incident, la
+   permission caméra a été explicitement refusée. L'app affiche un écran
+   contrôlé : "L'accès à la caméra a été refusé. Vous pouvez l'autoriser
+   dans les réglages de l'appareil, ou revenir en arrière : aucune donnée
+   n'est perdue.", avec boutons "Ouvrir les réglages"/"Retour" - aucun
+   crash, aucune perte de dossier.
+9. **Suppression avec confirmation** : la suppression déclenche une popup
+   explicite ("Supprimer tout le dossier ? Toutes les informations,
+   photos et notes de ce dossier seront supprimées définitivement de cet
+   appareil.") avec boutons Annuler/Supprimer le dossier - rien n'est
+   supprimé sans confirmation active.
+10. **Correction des informations** : formulaire d'édition (Fournisseur/
+    Transporteur/Référence BL/Commentaire) fonctionnel, avec bouton
+    Enregistrer.
+11. **Mode avion (R1-T09) / aucun appel réseau (R1-T10)** : le mode avion
+    est resté actif (icône visible dans la barre système sur toutes les
+    captures) pendant l'intégralité du parcours ci-dessus, sans aucune
+    dépendance réseau observée ni requise.
+
+**Note de transparence sur le déroulé du diagnostic** : avant d'obtenir ce
+résultat, deux problèmes d'environnement (pas de bug applicatif) ont
+retardé le diagnostic et méritent d'être consignés : (1) une confusion
+entre deux copies du dépôt sur le poste utilisateur - une copie non
+suivie par git, contenant encore d'anciens écrans stub R0, a été testée
+par erreur avant qu'on identifie le bon dépôt git (`reserveflash-git`),
+et (2) la gestion de batterie Samsung (mode "Optimisé"/veille des apps
+récemment installées) retardait le premier lancement à froid par l'icône
+au point de sembler bloqué sur l'écran de démarrage - résolu en passant
+l'app en "Non restreint" dans les réglages de batterie. Aucun des deux
+points n'est un défaut du code livré ; ils sont documentés ici par souci
+de traçabilité complète du parcours de validation.
+
+Le tag `r1-candidate` sera créé sur le commit qui inclut cette mise à jour
+documentaire, une fois celle-ci finalisée (voir section "Prochaines étapes
+avant recette" ci-dessous).
 
 ## Risque explicitement documenté : capture audio locale (`record`)
 
@@ -93,38 +189,51 @@ compromettre caméra, fichiers et persistance."*
 
 | Test | Statut | Détail |
 |---|---|---|
-| R1-T01 création d'un incident offline | ✅ Automatisé, non exécuté ici | `r1_capture_offline_test.dart`, groupe R1-T01 |
-| R1-T02 fermeture/réouverture → incident retrouvé | ✅ Automatisé, non exécuté ici | groupe R1-T02 |
-| R1-T03 preuve photo enregistrée + SHA-256 conservé | ✅ Automatisé, non exécuté ici | groupe R1-T03 |
-| R1-T04 plusieurs photos dans le même incident | ✅ Automatisé, non exécuté ici | groupe R1-T04 |
-| R1-T05 kill/restart → données intactes | ✅ Automatisé, non exécuté ici | groupe R1-T05 |
-| R1-T06 refus permission caméra → aucune perte/crash | 🟡 Manuel requis | code défensif en place (`CameraCapturePage`), non vérifiable par `flutter test` (canal de plateforme réel requis) |
-| R1-T07 fichier local manquant/corrompu → UI contrôlée | ✅ Automatisé, non exécuté ici | groupe R1-T07 (missing + corrupted) |
-| R1-T08 suppression avec confirmation | ✅ Automatisé (niveau persistance) + 🟡 confirmation UI à vérifier manuellement | groupe R1-T08 ; `rf_confirm_dialog.dart` est un widget partagé, non couvert par un widget test dans ce lot |
-| R1-T09 mode avion pendant tout le parcours | 🟡 Manuel requis | aucune dépendance réseau ajoutée par construction (voir CHANGELOG), à confirmer sur appareil réel |
-| R1-T10 aucun appel réseau déclenché par la capture locale | ✅ Garanti par construction + documenté | ni `LocalIncidentRepository` ni `EvidenceStorageService` n'importent de client HTTP ; à confirmer aussi en mode avion réel |
-| Tests R0 (zéro régression) | ✅ Conservés inchangés | non ré-exécutés ici (même limitation SDK ci-dessus) |
+| R1-T01 création d'un incident offline | ✅ Exécuté réellement, vert | `r1_capture_offline_test.dart`, groupe R1-T01 - `flutter test` réel (poste utilisateur + CI) |
+| R1-T02 fermeture/réouverture → incident retrouvé | ✅ Exécuté réellement, vert | groupe R1-T02 |
+| R1-T03 preuve photo enregistrée + SHA-256 conservé | ✅ Exécuté réellement, vert | groupe R1-T03 |
+| R1-T04 plusieurs photos dans le même incident | ✅ Exécuté réellement, vert | groupe R1-T04 |
+| R1-T05 kill/restart → données intactes | ✅ Exécuté réellement, vert | groupe R1-T05 |
+| R1-T06 refus permission caméra → aucune perte/crash | ✅ Exécuté réellement, vert | code défensif (`CameraCapturePage`) confirmé sur appareil réel (Samsung Galaxy A51) : écran de refus contrôlé affiché, aucun crash, aucune perte de dossier - voir "Parcours manuel réel" ci-dessus |
+| R1-T07 fichier local manquant/corrompu → UI contrôlée | ✅ Exécuté réellement, vert | groupe R1-T07 (missing + corrupted) |
+| R1-T08 suppression avec confirmation | ✅ Exécuté réellement, vert (persistance + confirmation UI) | groupe R1-T08 (persistance) + dialogue `rf_confirm_dialog.dart` ("Supprimer tout le dossier ?", boutons Annuler/Supprimer le dossier) confirmé affiché sur appareil réel - voir "Parcours manuel réel" ci-dessus |
+| R1-T09 mode avion pendant tout le parcours | ✅ Exécuté réellement, vert | parcours complet (création → BL → type de problème → preuves → description/vocal → clôture → fermeture/réouverture) déroulé de bout en bout en mode avion actif sur appareil réel, aucune erreur réseau, aucune donnée perdue - voir "Parcours manuel réel" ci-dessus |
+| R1-T10 aucun appel réseau déclenché par la capture locale | ✅ Garanti par construction + confirmé en usage réel | ni `LocalIncidentRepository` ni `EvidenceStorageService` n'importent de client HTTP ; confirmé aussi par l'usage réel en mode avion (R1-T09 ci-dessus) |
+| Tests R0 (zéro régression) | ✅ Exécutés réellement, tous verts | 61/61 tests, poste utilisateur ET CI GitHub Actions (2 environnements) |
 
-**"Automatisé, non exécuté ici"** signifie : le test est écrit avec la même
-rigueur qu'un test qui tournerait réellement (même pattern que
-`local_incident_repository_test.dart` en R0.2/R0.2.1, qui s'est révélé
-fiable une fois exécuté), mais n'a pas pu être lancé dans ce contexte de
-développement faute de SDK Flutter. **Ne pas compter une ligne de ce
-tableau comme "PASS" avant exécution réelle avec résultat vert.**
+**"Exécuté réellement, vert"** signifie : soit lancé pour de vrai via
+`flutter test` sur le poste Windows de l'utilisateur ET confirmé
+indépendamment par la CI GitHub Actions sur un runner Ubuntu propre (CI
+#5/#6, voir section "Exécution réelle" ci-dessus), soit - pour R1-T06,
+R1-T08 (volet UI) et R1-T09, qui nécessitent un vrai canal de plateforme
+(permission système, radio réseau) qu'aucun test automatisé ne peut
+simuler fidèlement - déroulé manuellement sur un vrai téléphone Android en
+conditions réelles (voir "Parcours manuel réel sur appareil Android" plus
+haut). Dans les deux cas, il ne s'agit pas d'une simple lecture de code.
+Ces constats manuels restent des observations rapportées par l'utilisateur
+testeur, pas une validation formelle du Gate R1 - cette dernière revient à
+la recette indépendante (voir section suivante).
 
 ## Prochaines étapes avant recette
 
-1. Exécuter le bootstrap réel (`mobile/README.md`) sur un poste avec SDK
-   Flutter : `flutter pub get`, `flutter analyze`, `flutter test`,
-   `flutter build apk --debug`.
-2. Corriger les éventuelles erreurs réelles révélées (attendu : au moins
-   `record` à surveiller en priorité, voir section risque ci-dessus -
-   même méthode "vagues" qu'en R0).
-3. Installer l'APK sur un vrai téléphone Android, activer le mode avion,
-   et dérouler le parcours complet du Gate R1 (cité en tête de ce
-   document).
-4. Une fois le parcours réussi sans crash ni perte de données : commit,
-   tag `r1-candidate`, push, CI GitHub Actions verte, puis livraison
-   complète (ZIP, APK, SHA-256, captures d'écran, idéalement vidéo).
+1. ~~Exécuter le bootstrap réel~~ **FAIT** - `flutter analyze` (0/0),
+   `flutter test` (61/61), `flutter build apk --debug` (réussi), sur le
+   poste utilisateur ET en CI GitHub Actions (voir ci-dessus).
+2. ~~Corriger les éventuelles erreurs réelles révélées~~ **FAIT** - 3 bugs
+   réels trouvés et corrigés (import `LazyDatabase`, lint const, dossier
+   `android/` incomplet) ; `record` n'a posé aucun problème.
+3. ~~Installer l'APK sur un vrai téléphone Android, activer le mode avion,
+   et dérouler le parcours complet du Gate R1~~ **FAIT** - déroulé sur un
+   Samsung Galaxy A51 (SM-A515F), mode avion actif, voir "Parcours manuel
+   réel sur appareil Android - preuve obtenue" ci-dessus pour le détail
+   point par point (création d'incident, photo BL, type de problème,
+   photos de preuve, description texte + vocale, clôture du dossier,
+   fermeture/réouverture avec persistance intacte, refus de permission
+   caméra géré sans crash, suppression avec confirmation, correction des
+   informations).
+4. Tag `r1-candidate` : à créer sur le commit qui inclut cette mise à jour
+   documentaire, puis livraison complète (ZIP, APK, SHA-256, captures
+   d'écran, `CHANGELOG.md`, ce document).
 5. La décision PASS/FAIL du Gate R1 revient à la recette indépendante, pas
-   à ce document ni à son auteur.
+   à ce document ni à son auteur - ce document se limite à livrer les
+   preuves ci-dessus.
