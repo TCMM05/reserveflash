@@ -30,6 +30,7 @@
 //    écrans n'importe `package:dio` ni aucun client HTTP - mêmes grep que
 //    R1-T10 initial), vérifié aussi manuellement (GATE_R1_STATUS.md).
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -86,11 +87,35 @@ LocalIncidentRepository _repositoryFor(AppDatabase db, Directory evidenceDocsDir
 // et de nombreux rapports similaires (ex. flutter/flutter#97737). Solution
 // officielle : laisser tourner le vrai event loop brièvement via
 // `runAsync()` avant de reprendre le pump normal.
-Future<void> settleWithRealIo(WidgetTester tester) async {
-  await tester.runAsync(() async {
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+// Diagnostic temporaire (à retirer une fois la cause réelle du blocage
+// identifiée) : le correctif `runAsync` ci-dessus documenté officiellement
+// n'a PAS suffi lors du passage réel sur poste (même blocage exact malgré
+// ce correctif). Plutôt que deviner une nouvelle hypothèse à l'aveugle,
+// chaque étape suspecte est désormais bornée par un timeout court et
+// identifiée par un message explicite - un blocage silencieux de plusieurs
+// minutes devient une `TimeoutException` en quelques secondes, avec le nom
+// exact de l'étape responsable.
+Future<T> withTimeout<T>(Future<T> future, String label) {
+  // ignore: avoid_print
+  print('DIAGNOSTIC >>> début : $label');
+  return future.timeout(
+    const Duration(seconds: 8),
+    onTimeout: () => throw TimeoutException('DIAGNOSTIC : BLOQUÉ ICI -> $label'),
+  ).then((T value) {
+    // ignore: avoid_print
+    print('DIAGNOSTIC >>> terminé : $label');
+    return value;
   });
-  await tester.pumpAndSettle();
+}
+
+Future<void> settleWithRealIo(WidgetTester tester) async {
+  await withTimeout(
+    tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }),
+    'settleWithRealIo -> runAsync(delay 50ms)',
+  );
+  await withTimeout(tester.pumpAndSettle(), 'settleWithRealIo -> pumpAndSettle (après runAsync)');
 }
 
 Future<void> _cleanupTempDir(Directory dir) async {
@@ -191,32 +216,35 @@ void main() {
       await repository.registerEvidenceAsset(asset);
 
       bool opened = false;
-      await tester.pumpWidget(
-        wrap(
-          Builder(
-            builder: (BuildContext context) => Scaffold(
-              body: EvidenceThumbnailTile(
-                asset: asset,
-                onTap: () {
-                  opened = true;
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => EvidencePhotoViewerScreen(
-                        incidentId: incident.id,
-                        asset: asset,
+      await withTimeout(
+        tester.pumpWidget(
+          wrap(
+            Builder(
+              builder: (BuildContext context) => Scaffold(
+                body: EvidenceThumbnailTile(
+                  asset: asset,
+                  onTap: () {
+                    opened = true;
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => EvidencePhotoViewerScreen(
+                          incidentId: incident.id,
+                          asset: asset,
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ),
         ),
+        'test1 -> pumpWidget (vignette)',
       );
-      await settleWithRealIo(tester);
+      await withTimeout(settleWithRealIo(tester), 'test1 -> settle #1 (après pumpWidget vignette)');
 
-      await tester.tap(find.byType(ListTile));
-      await settleWithRealIo(tester);
+      await withTimeout(tester.tap(find.byType(ListTile)), 'test1 -> tap(ListTile)');
+      await withTimeout(settleWithRealIo(tester), 'test1 -> settle #2 (après tap)');
 
       expect(opened, isTrue);
       expect(find.byType(EvidencePhotoViewerScreen), findsOneWidget);
