@@ -54,16 +54,20 @@ d'affirmation au-delà de ce qui a été exécuté) :
 
 ### Commit / tag / SHA de cette livraison
 
-- Commits : `3266752` (hotfixes) puis `2bd718c` (mise à jour de ce document
-  lui-même, forcément un commit distinct et postérieur - un document ne
-  peut pas décrire son propre commit avant d'exister).
-- Tag : `r0.2.1-hotfix-preuve-execution` (pointe sur `2bd718c`).
+- Commit du code (hotfixes eux-mêmes, pas ce document) : `3266752`
+  ("R0.2.1 - Hotfixes de premiere execution reelle").
+- Tag : `r0.2.1-hotfix-preuve-execution` (pointe sur le dernier commit de
+  cette livraison, documentation incluse - voir `git log` pour son hash
+  exact, volontairement non figé ici : ce document fait lui-même partie de
+  l'historique qu'il décrirait, un hash gravé en dur deviendrait
+  immédiatement obsolète dès la prochaine modification de ce fichier).
 - Archive de livraison : `ReserveFlash_R0.2.1_Hotfix.zip`, générée par
-  `git archive` depuis `2bd718c` - strictement identique au code committé,
-  ce document inclus. Le SHA-256 de cette archive est fourni dans le
-  message de livraison qui accompagne ce document (impossible à faire
-  figurer ICI par construction : l'archive contient ce fichier, donc son
-  hash ne peut être calculé qu'après que ce fichier soit figé).
+  `git archive` depuis le commit tagué `r0.2.1-hotfix-preuve-execution` -
+  strictement identique au code committé, ce document inclus. Le SHA-256
+  de cette archive est fourni dans le message de livraison qui l'accompagne
+  (impossible à faire figurer ici par construction : l'archive contient ce
+  fichier, donc son hash ne peut être calculé qu'après que ce fichier soit
+  figé).
 
 ## Mise à jour R0.2 (clôture ciblée demandée par le retour de recette)
 
