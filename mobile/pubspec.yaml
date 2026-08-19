@@ -63,6 +63,25 @@ dependencies:
   # confondus, indépendamment de la plateforme cible réelle).
   record: ^7.1.1
 
+  # Correction ciblée post-recette terrain R1 (avant freeze final) :
+  # "après capture d'une photo ou d'une note vocale, l'utilisateur ne peut
+  # pas réellement contrôler le média enregistré." La note vocale
+  # enregistrée par `record` (ci-dessus) devait devenir réellement
+  # relisible localement (lecture/pause, durée/progression) -
+  # `just_audio` est le seul ajout de plugin natif de ce correctif, donc
+  # le point de risque le plus élevé, à vérifier en priorité lors du
+  # prochain `flutter build apk --debug` réel (même méthode que pour
+  # `record` en R1 initial - voir mobile/README.md). Version choisie
+  # après recherche (pub.dev/packages/just_audio/changelog) : 0.10.6
+  # ("Support AGP 9" + migration des fichiers de build Android vers
+  # `.kts`) est explicitement alignée sur le toolchain déjà prouvé de ce
+  # projet (Flutter 3.47.0/Dart 3.13.0/Gradle 9.3.1/AGP 9.x, voir
+  # CHANGELOG.md R1) - la même génération de correctif AGP 9 que celle
+  # qui avait motivé le choix de `record: ^7.1.1`. Lecture 100% locale
+  # (fichier sur disque uniquement, jamais de source réseau/streaming) :
+  # aucune dépendance Internet introduite (R1-T09/T10).
+  just_audio: ^0.10.6
+
   # Icônes Material Symbols cohérentes (section 4.5).
   material_symbols_icons: ^4.2719.3
 

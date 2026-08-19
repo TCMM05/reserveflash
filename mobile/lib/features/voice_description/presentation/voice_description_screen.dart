@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -11,9 +12,11 @@ import 'package:reserveflash/core/design_system/rf_spacing.dart';
 import 'package:reserveflash/core/design_system/rf_typography.dart';
 import 'package:reserveflash/core/providers/app_providers.dart';
 import 'package:reserveflash/core/router/app_router.dart';
+import 'package:reserveflash/core/utils/duration_format.dart';
 import 'package:reserveflash/core/widgets/rf_confirm_dialog.dart';
 import 'package:reserveflash/domain/entities/evidence_asset.dart' as domain;
 import 'package:reserveflash/domain/entities/incident.dart' as domain;
+import 'package:reserveflash/features/common/presentation/evidence_audio_player_screen.dart';
 import 'package:reserveflash/features/common/presentation/evidence_thumbnail_tile.dart';
 import 'package:reserveflash/features/common/presentation/missing_incident_view.dart';
 
@@ -48,9 +51,17 @@ class _VoiceDescriptionScreenState extends ConsumerState<VoiceDescriptionScreen>
   String? _errorMessage;
   String? _audioErrorMessage;
 
+  // Correction ciblée post-recette terrain R1 : "pendant l'enregistrement,
+  // afficher un timer" - `Timer.periodic` local à l'écran, jamais persisté
+  // (purement un affichage temps réel, aucun impact sur la preuve
+  // enregistrée elle-même).
+  Timer? _recordingTimer;
+  Duration _recordingElapsed = Duration.zero;
+
   @override
   void dispose() {
     _notesController.dispose();
+    _recordingTimer?.cancel();
     // Best-effort : ne doit jamais faire planter la fermeture de l'écran
     // même si l'enregistreur natif est dans un état inattendu.
     _audioRecorder.dispose();
@@ -122,7 +133,16 @@ class _VoiceDescriptionScreenState extends ConsumerState<VoiceDescriptionScreen>
       final String path = '${tempDir.path}/${_uuid.v4()}.m4a';
       await _audioRecorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
       if (mounted) {
-        setState(() => _isRecording = true);
+        setState(() {
+          _isRecording = true;
+          _recordingElapsed = Duration.zero;
+        });
+        _recordingTimer?.cancel();
+        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted) {
+            setState(() => _recordingElapsed += const Duration(seconds: 1));
+          }
+        });
       }
     } catch (e) {
       // Best-effort explicite (point 5) : une erreur d'enregistrement audio
@@ -139,6 +159,8 @@ class _VoiceDescriptionScreenState extends ConsumerState<VoiceDescriptionScreen>
   }
 
   Future<void> _stopAndSaveRecording() async {
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
     setState(() => _isProcessingAudio = true);
     try {
       final String? path = await _audioRecorder.stop();
@@ -265,8 +287,24 @@ class _VoiceDescriptionScreenState extends ConsumerState<VoiceDescriptionScreen>
                     asset: a,
                     label: 'Note vocale',
                     onDelete: _isProcessingAudio ? null : () => _deleteAudio(a),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => EvidenceAudioPlayerScreen(
+                          incidentId: widget.incidentId,
+                          asset: a,
+                          label: 'Note vocale',
+                        ),
+                      ),
+                    ),
                   ),
                 ),
+                if (_isRecording) ...<Widget>[
+                  Text(
+                    'Enregistrement en cours : ${formatMmSs(_recordingElapsed)}',
+                    style: RfTypography.secondary,
+                  ),
+                  const SizedBox(height: RfSpacing.xs),
+                ],
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(

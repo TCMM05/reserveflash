@@ -1,14 +1,21 @@
 # Statut Gate R1 - "Capture Offline"
 
-**Statut : PREUVES COMPLÈTES, EN ATTENTE DE RECETTE INDÉPENDANTE.** Ce
-document liste les preuves livrées avec la version candidate R1, y compris
-désormais le parcours manuel complet déroulé sur un vrai téléphone Android
-(voir "Parcours manuel réel sur appareil Android" ci-dessous). Conformément
-à la demande corrective ("ne pas déclarer R1 PASS vous-même : livrer les
-preuves et laisser la recette indépendante décider"), **aucune section de
-ce document n'affirme que le Gate R1 est validé** - toutes les preuves
-factuelles sont réunies, mais le verdict PASS/FAIL revient exclusivement à
-la recette indépendante, pas à ce document ni à son auteur.
+**Statut : CORRECTION EN COURS DE VÉRIFICATION - PAS ENCORE RE-CONFIRMÉE PAR
+EXÉCUTION RÉELLE.** La recette terrain indépendante a trouvé un défaut réel
+lors du parcours manuel décrit plus bas : les photos et la note vocale
+capturées n'étaient pas consultables/écoutables depuis l'app une fois
+enregistrées. Voir la section "Correction ciblée post-recette terrain
+(photo/audio)" ci-dessous pour le détail complet. **Ce correctif a été
+écrit mais n'a PAS encore été vérifié par un `flutter analyze`/`flutter
+test`/`flutter build apk` réel, ni par un nouveau passage sur appareil** -
+exactement la même rigueur que le reste de R1 initial (voir la section
+"Exécution réelle" plus bas) reste à appliquer avant de considérer ce
+correctif comme un nouveau candidat sérieux. Le tag `r1-candidate` existant
+correspond au commit D'AVANT ce correctif - **ne pas le considérer comme
+à jour tant que le correctif n'a pas été vérifié par une exécution réelle.**
+Conformément à la demande corrective ("ne pas déclarer R1 PASS vous-même :
+livrer les preuves et laisser la recette indépendante décider"), **aucune
+section de ce document n'affirme que le Gate R1 est validé.**
 
 ## Rappel du Gate R1 (critère d'acceptation, verbatim de la demande)
 
@@ -184,6 +191,77 @@ compromettre caméra, fichiers et persistance."*
   persistance restent intacts par construction - ce sont des chemins de
   code indépendants).
 
+## Correction ciblée post-recette terrain (photo/audio) - PAS ENCORE vérifiée
+
+La recette terrain indépendante, en déroulant le parcours réel sur le
+Samsung Galaxy A51 (voir section ci-dessus), a signalé : *"une fois les
+photos et l'audio enregistrés dans le dossier, je ne peux pas les lire, les
+ouvrir ni écouter l'audio."* Vérification faite dans le code : exact -
+`EvidenceThumbnailTile` (utilisé par S06/S09/S10/S17) n'avait aucun `onTap`,
+et aucun lecteur audio n'existait dans le projet (`pubspec.yaml` ne
+contenait que `record`, pour l'enregistrement, jamais un package de
+lecture). Ce n'était ni une perte de données ni un crash (les fichiers sont
+bien écrits et intègres, SHA-256 vérifié), mais un vrai trou d'usage.
+
+**Correctif demandé et livré ici** (périmètre strictement limité à ce
+point, sans toucher Drift, l'architecture Local-First ni le backend, comme
+demandé) :
+
+- **Photo/BL** : `EvidencePhotoViewerScreen` (nouveau) - plein écran,
+  zoom/pan (`InteractiveViewer`), bouton retour explicite, reprendre
+  (recapture avec remplacement explicite ancien->nouveau, jamais d'état où
+  le dossier n'aurait ni l'un ni l'autre) et supprimer (avec confirmation
+  partagée `rf_confirm_dialog.dart`), état contrôlé "introuvable"/
+  "corrompu" si le fichier est manquant ou illisible (jamais de crash,
+  même invariant que R1-T07 initial). Ouverte au tap de toute vignette
+  photo/BL depuis S06/S09/S17.
+- **Audio** : `EvidenceAudioPlayerScreen` (nouveau) - lecture/pause,
+  durée/progression (`Slider` + affichage `mm:ss`), arrêter/recommencer
+  (retour au début), supprimer, état contrôlé "introuvable"/"corrompu" sans
+  même tenter d'ouvrir le lecteur natif dans ce cas. Ouverte au tap de la
+  note vocale depuis S10/S17.
+- **Timer d'enregistrement** : `voice_description_screen.dart` affiche
+  désormais un chronomètre "Enregistrement en cours : mm:ss" pendant la
+  capture (absent avant ce correctif).
+- **Nouveau plugin natif** : `just_audio: ^0.10.6` (lecture locale
+  uniquement - jamais de source réseau/streaming). Choisi après recherche
+  du changelog officiel (pub.dev) : la 0.10.6 ("Support AGP 9" + migration
+  des fichiers de build Android vers `.kts`) est explicitement alignée sur
+  le même toolchain déjà prouvé pour `record` (AGP 9.x/Kotlin Gradle DSL,
+  Flutter 3.47.0/Dart 3.13.0). **C'est, comme `record` l'avait été pour R1
+  initial, le point de risque de build le plus élevé de ce correctif - à
+  vérifier en priorité lors du prochain `flutter pub get`/`flutter build
+  apk --debug` réel.**
+
+**Tests ajoutés** (`mobile/test/features/evidence_viewer_test.dart`) -
+**écrits mais PAS ENCORE exécutés pour de vrai** (aucun `flutter test`
+réel n'a pu être lancé dans cet environnement de développement, même
+limitation que d'habitude - voir `mobile/README.md`) :
+
+- formatage `mm:ss` (fonction pure, testée directement).
+- photo disponible → tap sur la vignette ouvre bien la visionneuse plein
+  écran.
+- photo → reste consultable (fichier + métadonnées) après fermeture/
+  réouverture d'une seconde connexion base (équivalent réel R1-T02/T05).
+- photo manquante / corrompue → message contrôlé, aucune exception levée.
+- suppression depuis la visionneuse → retire réellement le fichier et la
+  métadonnée.
+- **Lecture audio réelle NON testée automatiquement** : `just_audio`
+  n'a, comme `record`/`camera`, aucun canal de plateforme disponible en
+  `flutter test` pur - le comportement complet de
+  `EvidenceAudioPlayerScreen` (lecture/pause, fichier manquant/corrompu,
+  suppression) reste **manuel requis sur un vrai appareil**, à vérifier
+  lors de la prochaine recette terrain.
+
+**Prochaine étape indispensable avant tout nouveau tag** : sur le poste de
+l'utilisateur, dans `reserveflash-git` - `flutter pub get` (vérifier que
+`just_audio` se résout et se construit sans conflit), `flutter analyze`,
+`flutter test` (dont le nouveau fichier ci-dessus), `flutter build apk
+--debug`, puis réinstaller l'APK et reconfirmer manuellement sur un vrai
+téléphone : ouverture plein écran d'une photo, lecture/pause d'une note
+vocale, suppression/reprise, mode avion. Comme pour R1 initial, aucun
+verdict PASS ne sera déclaré ici avant cette exécution réelle.
+
 ## Tests obligatoires R1 - statut
 
 | Test | Statut | Détail |
@@ -230,10 +308,20 @@ la recette indépendante (voir section suivante).
    fermeture/réouverture avec persistance intacte, refus de permission
    caméra géré sans crash, suppression avec confirmation, correction des
    informations).
-4. ~~Tag `r1-candidate`~~ **FAIT** - créé sur le commit qui inclut cette
-   mise à jour documentaire. Reste : assembler la livraison complète (ZIP,
-   APK, SHA-256, captures d'écran, `CHANGELOG.md`, ce document) pour la
-   recette indépendante.
+4. ~~Tag `r1-candidate`~~ **FAIT** (mais désormais dépassé par le correctif
+   ci-dessus - voir point 6).
 5. La décision PASS/FAIL du Gate R1 revient à la recette indépendante, pas
    à ce document ni à son auteur - ce document se limite à livrer les
    preuves ci-dessus.
+6. **EN COURS** - Correction ciblée post-recette terrain (visionneuse
+   photo + lecteur audio, voir section dédiée ci-dessus) : écrite, PAS
+   ENCORE vérifiée par exécution réelle. Reste à faire, sur le poste de
+   l'utilisateur : `flutter pub get`/`flutter analyze`/`flutter test`
+   (dont `evidence_viewer_test.dart`)/`flutter build apk --debug`, corriger
+   les éventuels bugs réels révélés (même méthode qu'à chaque bootstrap
+   précédent de ce projet), puis une nouvelle recette terrain manuelle
+   ciblée sur : ouverture plein écran d'une photo, lecture/pause d'une
+   note vocale, suppression/reprise, mode avion. Ce n'est qu'une fois cette
+   nouvelle exécution réelle confirmée que la livraison complète (ZIP, APK,
+   SHA-256, captures d'écran, `CHANGELOG.md`, ce document) et un nouveau
+   tag pourront être préparés.

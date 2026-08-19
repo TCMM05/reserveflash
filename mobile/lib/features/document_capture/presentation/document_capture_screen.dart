@@ -7,6 +7,7 @@ import 'package:reserveflash/core/providers/app_providers.dart';
 import 'package:reserveflash/core/router/app_router.dart';
 import 'package:reserveflash/domain/entities/evidence_asset.dart' as domain;
 import 'package:reserveflash/features/common/presentation/camera_capture_page.dart';
+import 'package:reserveflash/features/common/presentation/evidence_photo_viewer_screen.dart';
 import 'package:reserveflash/features/common/presentation/evidence_thumbnail_tile.dart';
 import 'package:reserveflash/features/common/presentation/missing_incident_view.dart';
 
@@ -99,7 +100,20 @@ class _DocumentCaptureScreenState extends ConsumerState<DocumentCaptureScreen> {
                   child: hasDocument
                       ? ListView(
                           children: deliveryDocs
-                              .map((domain.EvidenceAsset a) => EvidenceThumbnailTile(asset: a))
+                              .map(
+                                (domain.EvidenceAsset a) => EvidenceThumbnailTile(
+                                  asset: a,
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => EvidencePhotoViewerScreen(
+                                        incidentId: widget.incidentId,
+                                        asset: a,
+                                        label: 'Bon de livraison',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )
                               .toList(),
                         )
                       : const Center(

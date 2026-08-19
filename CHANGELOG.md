@@ -2,6 +2,71 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.2.1] - R1 correction ciblée post-recette terrain (photo/audio) - 2026-08-19
+
+**Écrit mais PAS ENCORE vérifié par exécution réelle** (`flutter analyze`/
+`flutter test`/`flutter build apk`) - voir `docs/GATE_R1_STATUS.md`,
+section "Correction ciblée post-recette terrain (photo/audio)", pour le
+détail complet et l'état précis de vérification.
+
+Origine : la recette terrain indépendante, en déroulant le parcours réel
+sur un Samsung Galaxy A51, a signalé qu'une fois les photos et la note
+vocale enregistrées dans un dossier, il était impossible de les relire/
+écouter depuis l'app. Vérifié dans le code : exact -
+`EvidenceThumbnailTile` n'avait aucun `onTap`, et le projet n'avait aucun
+package de lecture audio (seulement `record`, pour l'enregistrement).
+Aucune perte de données ni crash - un trou d'usage réel. Correctif
+strictement ciblé sur ce point (aucun changement Drift, architecture
+Local-First ou backend, comme demandé) :
+
+1. **`EvidencePhotoViewerScreen`** (nouveau,
+   `lib/features/common/presentation/evidence_photo_viewer_screen.dart`) -
+   visionneuse plein écran (photo/BL) : zoom/pan (`InteractiveViewer`),
+   bouton retour explicite, reprendre (remplacement explicite ancien ->
+   nouveau, jamais d'état intermédiaire sans preuve), supprimer (avec
+   confirmation), état contrôlé "introuvable"/"corrompu" sans crash
+   (étend l'invariant R1-T07 au rendu plein écran).
+2. **`EvidenceAudioPlayerScreen`** (nouveau,
+   `lib/features/common/presentation/evidence_audio_player_screen.dart`) -
+   lecteur plein écran (note vocale) : lecture/pause, durée/progression,
+   arrêter/recommencer, supprimer, état contrôlé "introuvable"/"corrompu"
+   sans même tenter d'ouvrir le lecteur natif dans ce cas.
+3. **`just_audio: ^0.10.6`** (nouveau, `mobile/pubspec.yaml`) - lecture
+   audio 100% locale (fichier sur disque uniquement, jamais de réseau/
+   streaming). Choisi après recherche du changelog officiel (pub.dev) :
+   "Support AGP 9" + migration Android vers `.kts`, alignée sur le même
+   toolchain déjà prouvé pour `record` (AGP 9.x/Kotlin Gradle DSL, Flutter
+   3.47.0/Dart 3.13.0). Seul nouveau plugin natif de ce correctif, donc le
+   point de risque de build le plus élevé - à vérifier en priorité lors du
+   prochain `flutter build apk --debug` réel (même méthode que `record` en
+   R1 initial).
+4. **`lib/core/utils/duration_format.dart`** (nouveau) - formatage `mm:ss`
+   partagé par le timer d'enregistrement et la progression de lecture.
+5. **`voice_description_screen.dart`** - ajoute un chronomètre affiché
+   pendant l'enregistrement ("Enregistrement en cours : mm:ss"), absent
+   avant ce correctif.
+6. **`EvidenceThumbnailTile`** - nouveau paramètre `onTap`, câblé depuis
+   `document_capture_screen.dart` (S06), `evidence_capture_screen.dart`
+   (S09), `voice_description_screen.dart` (S10) et
+   `incident_detail_screen.dart` (S17, qui route vers la visionneuse photo
+   ou le lecteur audio selon `documentType`) pour ouvrir la visionneuse/le
+   lecteur correspondant.
+7. **Tests** (`mobile/test/features/evidence_viewer_test.dart`, nouveau) -
+   formatage `mm:ss`, ouverture plein écran d'une photo au tap, photo
+   consultable après fermeture/réouverture, photo manquante/corrompue sans
+   crash, suppression réelle depuis la visionneuse. **La lecture audio
+   réelle n'est PAS testée automatiquement** : `just_audio`, comme
+   `record`/`camera`, n'a aucun canal de plateforme disponible en `flutter
+   test` pur - `EvidenceAudioPlayerScreen` reste "manuel requis" sur un
+   vrai appareil pour son comportement complet (voir
+   `docs/GATE_R1_STATUS.md`).
+
+**Prochaine étape indispensable** : bootstrap réel complet sur le poste de
+l'utilisateur (`flutter pub get`/`flutter analyze`/`flutter test`/
+`flutter build apk --debug`), correction des éventuels bugs réels révélés,
+puis nouvelle recette terrain manuelle avant tout nouveau tag - **cette
+entrée ne déclare PAS ce correctif validé.**
+
 ## [0.2.0] - R1 "Capture Offline" (candidate) - 2026-08-19
 
 Développée en partant strictement de la baseline gelée `r0-final` (voir

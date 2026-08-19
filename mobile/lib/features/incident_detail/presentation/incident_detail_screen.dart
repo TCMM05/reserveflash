@@ -12,6 +12,8 @@ import 'package:reserveflash/domain/entities/evidence_asset.dart' as domain;
 import 'package:reserveflash/domain/entities/incident.dart' as domain;
 import 'package:reserveflash/domain/entities/issue.dart' as domain;
 import 'package:reserveflash/domain/value_objects/issue_type.dart';
+import 'package:reserveflash/features/common/presentation/evidence_audio_player_screen.dart';
+import 'package:reserveflash/features/common/presentation/evidence_photo_viewer_screen.dart';
 import 'package:reserveflash/features/common/presentation/evidence_thumbnail_tile.dart';
 import 'package:reserveflash/features/common/presentation/missing_incident_view.dart';
 
@@ -254,6 +256,7 @@ class _IncidentDetailBody extends ConsumerWidget {
                         asset: a,
                         label: _labelForAsset(a),
                         onDelete: () => onDeleteEvidence(a),
+                        onTap: () => _openEvidence(context, incident.id, a),
                       ),
                     )
                     .toList(),
@@ -271,6 +274,35 @@ class _IncidentDetailBody extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Correction ciblée post-recette terrain R1 : ouvre la visionneuse
+  /// photo ou le lecteur audio plein écran selon le type de la preuve -
+  /// aucun des deux n'est une étape nommée du parcours S01-S20, donc
+  /// poussés via `Navigator.push` (même convention que `CameraCapturePage`),
+  /// jamais via go_router.
+  void _openEvidence(BuildContext context, String incidentId, domain.EvidenceAsset asset) {
+    if (asset.documentType == domain.EvidenceDocumentType.audio) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => EvidenceAudioPlayerScreen(
+            incidentId: incidentId,
+            asset: asset,
+            label: _labelForAsset(asset),
+          ),
+        ),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EvidencePhotoViewerScreen(
+          incidentId: incidentId,
+          asset: asset,
+          label: _labelForAsset(asset),
+        ),
       ),
     );
   }

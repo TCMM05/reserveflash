@@ -11,12 +11,25 @@ import 'package:reserveflash/domain/entities/evidence_asset.dart' as domain;
 /// gère explicitement les statuts `missing`/`corrupted` (point 9/R1-T07) :
 /// n'essaie JAMAIS de décoder l'image d'un fichier dont l'intégrité n'est
 /// pas `available`, affiche une icône d'alerte contrôlée à la place.
+///
+/// [onTap] (correction ciblée post-recette terrain R1, avant freeze final) :
+/// ouvre la visionneuse photo/le lecteur audio plein écran correspondant -
+/// câblé par chaque écran appelant (qui sait quel type de visionneuse
+/// ouvrir selon `asset.documentType`), voir `evidence_photo_viewer_screen.dart`
+/// / `evidence_audio_player_screen.dart`.
 class EvidenceThumbnailTile extends StatelessWidget {
-  const EvidenceThumbnailTile({required this.asset, this.label, this.onDelete, super.key});
+  const EvidenceThumbnailTile({
+    required this.asset,
+    this.label,
+    this.onDelete,
+    this.onTap,
+    super.key,
+  });
 
   final domain.EvidenceAsset asset;
   final String? label;
   final VoidCallback? onDelete;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +60,7 @@ class EvidenceThumbnailTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: RfSpacing.sm),
       child: ListTile(
+        onTap: onTap,
         leading: leading,
         title: Text(
           label ?? DateFormat('dd/MM/yyyy HH:mm').format(asset.capturedAtDevice.toLocal()),
