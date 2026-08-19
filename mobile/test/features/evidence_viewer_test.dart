@@ -211,75 +211,56 @@ void main() {
   group('Correction R1 - visionneuse photo : ouverture plein écran', () {
     testWidgets('un tap sur une vignette photo disponible ouvre la visionneuse plein écran',
         (WidgetTester tester) async {
-      // Log réinitialisé au début de ce test précis (celui qui bloque de
-      // façon reproductible) - chemin affiché explicitement pour pouvoir le
-      // retrouver facilement sur le poste Windows.
+      // Cause racine confirmée par exécution réelle (diagnostics v1-v3) :
+      // À L'INTÉRIEUR d'un `testWidgets()`, MÊME AVANT le premier
+      // `pumpWidget`, un appel dart:io réellement asynchrone
+      // (`File.exists()`, `readAsBytes()`, `writeAsBytes()` async,
+      // `rename()`...) reste bloqué indéfiniment s'il n'est pas exécuté via
+      // `tester.runAsync()` - preuve : le diagnostic v3 a montré que même
+      // `source.exists()`, la toute première opération dans le corps de
+      // `captureFromFile`, ne se termine jamais. `test/data/
+      // r1_capture_offline_test.dart` utilise `test()` (PAS `testWidgets()`)
+      // et n'a jamais ce problème avec les mêmes appels - c'est la présence
+      // du binding `TestWidgetsFlutterBinding` (actif dès l'entrée dans
+      // `testWidgets()`, pas seulement après un pump) qui change le
+      // comportement de TOUT dart:io réellement asynchrone dans ce fichier.
+      // `repository.createIncident` (Drift/sqlite3 via FFI, essentiellement
+      // synchrone sous le capot) n'est PAS concerné et continue de
+      // fonctionner sans `runAsync` - cohérent avec le diagnostic v2 qui
+      // l'a vu se terminer normalement.
       if (_diagLogFile.existsSync()) {
         _diagLogFile.deleteSync();
       }
       logStep('=== DEBUT DU TEST === (fichier log : ${_diagLogFile.path})');
 
-      logStep('DEBUT repository.createIncident');
-      final domain.Incident incident = await repository.createIncident(
-        occurredAt: DateTime.utc(2026, 8, 19, 8),
-      );
-      logStep('FIN   repository.createIncident');
+      late domain.Incident incident;
+      late domain.EvidenceAsset asset;
+      await tester.runAsync(() async {
+        logStep('DEBUT repository.createIncident');
+        incident = await repository.createIncident(
+          occurredAt: DateTime.utc(2026, 8, 19, 8),
+        );
+        logStep('FIN   repository.createIncident');
 
-      logStep('DEBUT ecriture fichier photo source');
-      final File source = File('${sourceDir.path}/photo.png')
-        ..writeAsBytesSync(_validPngBytes, flush: true);
-      logStep('FIN   ecriture fichier photo source');
+        logStep('DEBUT ecriture fichier photo source');
+        final File source = File('${sourceDir.path}/photo.png')
+          ..writeAsBytesSync(_validPngBytes, flush: true);
+        logStep('FIN   ecriture fichier photo source');
 
-      // Diagnostic v3 : v2 a localisé le blocage précisément DANS
-      // `storage.captureFromFile` (dernier log : "DEBUT storage.
-      // captureFromFile", jamais de "FIN") - AVANT tout pumpWidget, donc
-      // rien à voir avec Image.file/pumpAndSettle/runAsync (hypothèses v1/
-      // v2 réfutées). Comme cette même méthode est utilisée avec succès des
-      // dizaines de fois dans test/data/r1_capture_offline_test.dart (déjà
-      // vert), le problème n'est pas la méthode elle-même mais PEUT-ÊTRE une
-      // étape précise de son corps dans ce contexte précis. On reproduit ici
-      // son corps exact (voir lib/data/local/evidence_storage.dart) avec un
-      // `logStep` avant/après chaque opération disque, pour isoler l'étape
-      // fautive au lieu de traiter la méthode comme une boîte noire.
-      logStep('DEBUT source.exists()');
-      final bool sourceExists = await source.exists();
-      logStep('FIN   source.exists() = $sourceExists');
+        logStep('DEBUT storage.captureFromFile');
+        asset = await storage.captureFromFile(
+          incidentId: incident.id,
+          sourcePath: source.path,
+          documentType: domain.EvidenceDocumentType.photo,
+          mimeType: 'image/png',
+          extension: 'png',
+        );
+        logStep('FIN   storage.captureFromFile');
 
-      logStep('DEBUT source.readAsBytes()');
-      final List<int> rawBytes = await source.readAsBytes();
-      logStep('FIN   source.readAsBytes() (${rawBytes.length} octets)');
-
-      logStep('DEBUT storage.evidenceDirectoryFor');
-      final Directory evDir = await storage.evidenceDirectoryFor(incident.id);
-      logStep('FIN   storage.evidenceDirectoryFor -> ${evDir.path}');
-
-      const String diagId = 'diag-test-asset-1';
-      final String finalPath = '${evDir.path}/$diagId.png';
-      final File tempFile = File('$finalPath.tmp');
-
-      logStep('DEBUT tempFile.writeAsBytes');
-      await tempFile.writeAsBytes(rawBytes, flush: true);
-      logStep('FIN   tempFile.writeAsBytes');
-
-      logStep('DEBUT tempFile.rename');
-      await tempFile.rename(finalPath);
-      logStep('FIN   tempFile.rename');
-
-      final domain.EvidenceAsset asset = domain.EvidenceAsset(
-        id: diagId,
-        incidentId: incident.id,
-        documentType: domain.EvidenceDocumentType.photo,
-        localFilePath: finalPath,
-        sha256: 'diagnostic-sha-placeholder',
-        mimeType: 'image/png',
-        bytes: rawBytes.length,
-        capturedAtDevice: DateTime.now().toUtc(),
-      );
-      logStep('FIN   construction EvidenceAsset manuelle');
-
-      logStep('DEBUT repository.registerEvidenceAsset');
-      await repository.registerEvidenceAsset(asset);
-      logStep('FIN   repository.registerEvidenceAsset');
+        logStep('DEBUT repository.registerEvidenceAsset');
+        await repository.registerEvidenceAsset(asset);
+        logStep('FIN   repository.registerEvidenceAsset');
+      });
 
       bool opened = false;
       await traced(
@@ -322,31 +303,45 @@ void main() {
 
     testWidgets('reste consultable (fichier + métadonnées) après fermeture/réouverture',
         (WidgetTester tester) async {
-      final domain.Incident incident = await repository.createIncident(
-        occurredAt: DateTime.utc(2026, 8, 19, 9),
-      );
-      final File source = File('${sourceDir.path}/photo2.png')
-        ..writeAsBytesSync(_validPngBytes, flush: true);
-      final domain.EvidenceAsset asset = await storage.captureFromFile(
-        incidentId: incident.id,
-        sourcePath: source.path,
-        documentType: domain.EvidenceDocumentType.photo,
-        mimeType: 'image/png',
-        extension: 'png',
-      );
-      await repository.registerEvidenceAsset(asset);
+      late String incidentId;
+      late IncidentRepository reopenedRepository;
+      late domain.EvidenceAsset reopenedAsset;
 
-      // "Fermeture/réouverture" : nouvelle connexion DB sur le même fichier
-      // (équivalent réel d'un kill/relance de l'app, même méthode que
-      // R1-T02/T05).
-      await db.close();
-      final AppDatabase reopened = _openFileBackedDatabase(dbFile);
-      final IncidentRepository reopenedRepository = _repositoryFor(reopened, evidenceDocsDir);
-      final List<domain.EvidenceAsset> reopenedAssets =
-          await reopenedRepository.listEvidenceAssets(incident.id);
-      expect(reopenedAssets, hasLength(1));
-      final domain.EvidenceAsset reopenedAsset = reopenedAssets.single;
-      expect(await File(reopenedAsset.localFilePath).exists(), isTrue);
+      await tester.runAsync(() async {
+        final domain.Incident incident = await repository.createIncident(
+          occurredAt: DateTime.utc(2026, 8, 19, 9),
+        );
+        incidentId = incident.id;
+        final File source = File('${sourceDir.path}/photo2.png')
+          ..writeAsBytesSync(_validPngBytes, flush: true);
+        final domain.EvidenceAsset asset = await storage.captureFromFile(
+          incidentId: incident.id,
+          sourcePath: source.path,
+          documentType: domain.EvidenceDocumentType.photo,
+          mimeType: 'image/png',
+          extension: 'png',
+        );
+        await repository.registerEvidenceAsset(asset);
+
+        // "Fermeture/réouverture" : nouvelle connexion DB sur le même
+        // fichier (équivalent réel d'un kill/relance de l'app, même méthode
+        // que R1-T02/T05). Fermée à nouveau avant la fin de ce bloc
+        // `runAsync` : le rendu de `EvidencePhotoViewerScreen` ci-dessous ne
+        // requête plus jamais le repository une fois l'asset déjà en main
+        // (aucun provider `watch` sur cet écran), donc la connexion n'a pas
+        // besoin de rester ouverte pendant le pump.
+        await db.close();
+        final AppDatabase reopened = _openFileBackedDatabase(dbFile);
+        reopenedRepository = _repositoryFor(reopened, evidenceDocsDir);
+        final List<domain.EvidenceAsset> reopenedAssets =
+            await reopenedRepository.listEvidenceAssets(incident.id);
+        expect(reopenedAssets, hasLength(1));
+        reopenedAsset = reopenedAssets.single;
+        expect(await File(reopenedAsset.localFilePath).exists(), isTrue);
+
+        await reopened.close();
+        db = _openFileBackedDatabase(dbFile); // pour que tearDown ferme une connexion valide.
+      });
 
       await tester.pumpWidget(
         ProviderScope(
@@ -355,7 +350,7 @@ void main() {
             evidenceStorageServiceProvider.overrideWithValue(storage),
           ],
           child: MaterialApp(
-            home: EvidencePhotoViewerScreen(incidentId: incident.id, asset: reopenedAsset),
+            home: EvidencePhotoViewerScreen(incidentId: incidentId, asset: reopenedAsset),
           ),
         ),
       );
@@ -364,35 +359,38 @@ void main() {
       expect(find.byType(InteractiveViewer), findsOneWidget);
       expect(find.textContaining('introuvable'), findsNothing);
       expect(tester.takeException(), isNull);
-
-      await reopened.close();
-      db = _openFileBackedDatabase(dbFile); // pour que tearDown ferme une connexion valide.
     });
 
     testWidgets('fichier photo manquant -> message contrôlé, aucun crash', (WidgetTester tester) async {
-      final domain.Incident incident = await repository.createIncident(
-        occurredAt: DateTime.utc(2026, 8, 19, 10),
-      );
-      final File source = File('${sourceDir.path}/photo3.png')
-        ..writeAsBytesSync(_validPngBytes, flush: true);
-      final domain.EvidenceAsset asset = await storage.captureFromFile(
-        incidentId: incident.id,
-        sourcePath: source.path,
-        documentType: domain.EvidenceDocumentType.photo,
-        mimeType: 'image/png',
-        extension: 'png',
-      );
-      await repository.registerEvidenceAsset(asset);
-      // Perte de fichier hors du contrôle de l'app (même scénario que
-      // R1-T07 initial).
-      await File(asset.localFilePath).delete();
-      final List<domain.EvidenceAsset> verified =
-          await repository.verifyEvidenceAssetsIntegrity(incident.id);
-      final domain.EvidenceAsset missingAsset = verified.single;
-      expect(missingAsset.availabilityStatus, equals(domain.EvidenceAvailability.missing));
+      late String incidentId;
+      late domain.EvidenceAsset missingAsset;
+
+      await tester.runAsync(() async {
+        final domain.Incident incident = await repository.createIncident(
+          occurredAt: DateTime.utc(2026, 8, 19, 10),
+        );
+        incidentId = incident.id;
+        final File source = File('${sourceDir.path}/photo3.png')
+          ..writeAsBytesSync(_validPngBytes, flush: true);
+        final domain.EvidenceAsset asset = await storage.captureFromFile(
+          incidentId: incident.id,
+          sourcePath: source.path,
+          documentType: domain.EvidenceDocumentType.photo,
+          mimeType: 'image/png',
+          extension: 'png',
+        );
+        await repository.registerEvidenceAsset(asset);
+        // Perte de fichier hors du contrôle de l'app (même scénario que
+        // R1-T07 initial).
+        await File(asset.localFilePath).delete();
+        final List<domain.EvidenceAsset> verified =
+            await repository.verifyEvidenceAssetsIntegrity(incident.id);
+        missingAsset = verified.single;
+        expect(missingAsset.availabilityStatus, equals(domain.EvidenceAvailability.missing));
+      });
 
       await tester.pumpWidget(
-        wrap(EvidencePhotoViewerScreen(incidentId: incident.id, asset: missingAsset)),
+        wrap(EvidencePhotoViewerScreen(incidentId: incidentId, asset: missingAsset)),
       );
       await settleWithRealIo(tester);
 
@@ -402,30 +400,36 @@ void main() {
     });
 
     testWidgets('fichier photo corrompu -> message contrôlé, aucun crash', (WidgetTester tester) async {
-      final domain.Incident incident = await repository.createIncident(
-        occurredAt: DateTime.utc(2026, 8, 19, 11),
-      );
-      final File source = File('${sourceDir.path}/photo4.png')
-        ..writeAsBytesSync(_validPngBytes, flush: true);
-      final domain.EvidenceAsset asset = await storage.captureFromFile(
-        incidentId: incident.id,
-        sourcePath: source.path,
-        documentType: domain.EvidenceDocumentType.photo,
-        mimeType: 'image/png',
-        extension: 'png',
-      );
-      await repository.registerEvidenceAsset(asset);
-      // Corruption simulée : octets remplacés directement sur le disque
-      // (même scénario que R1-T07 initial) - ni une image PNG valide, ni
-      // les octets d'origine.
-      await File(asset.localFilePath).writeAsBytes(<int>[1, 2, 3, 4, 5]);
-      final List<domain.EvidenceAsset> verified =
-          await repository.verifyEvidenceAssetsIntegrity(incident.id);
-      final domain.EvidenceAsset corruptedAsset = verified.single;
-      expect(corruptedAsset.availabilityStatus, equals(domain.EvidenceAvailability.corrupted));
+      late String incidentId;
+      late domain.EvidenceAsset corruptedAsset;
+
+      await tester.runAsync(() async {
+        final domain.Incident incident = await repository.createIncident(
+          occurredAt: DateTime.utc(2026, 8, 19, 11),
+        );
+        incidentId = incident.id;
+        final File source = File('${sourceDir.path}/photo4.png')
+          ..writeAsBytesSync(_validPngBytes, flush: true);
+        final domain.EvidenceAsset asset = await storage.captureFromFile(
+          incidentId: incident.id,
+          sourcePath: source.path,
+          documentType: domain.EvidenceDocumentType.photo,
+          mimeType: 'image/png',
+          extension: 'png',
+        );
+        await repository.registerEvidenceAsset(asset);
+        // Corruption simulée : octets remplacés directement sur le disque
+        // (même scénario que R1-T07 initial) - ni une image PNG valide, ni
+        // les octets d'origine.
+        await File(asset.localFilePath).writeAsBytes(<int>[1, 2, 3, 4, 5]);
+        final List<domain.EvidenceAsset> verified =
+            await repository.verifyEvidenceAssetsIntegrity(incident.id);
+        corruptedAsset = verified.single;
+        expect(corruptedAsset.availabilityStatus, equals(domain.EvidenceAvailability.corrupted));
+      });
 
       await tester.pumpWidget(
-        wrap(EvidencePhotoViewerScreen(incidentId: incident.id, asset: corruptedAsset)),
+        wrap(EvidencePhotoViewerScreen(incidentId: incidentId, asset: corruptedAsset)),
       );
       await settleWithRealIo(tester);
 
@@ -436,22 +440,28 @@ void main() {
 
     testWidgets('le bouton supprimer déclenche la confirmation puis retire réellement la preuve',
         (WidgetTester tester) async {
-      final domain.Incident incident = await repository.createIncident(
-        occurredAt: DateTime.utc(2026, 8, 19, 12),
-      );
-      final File source = File('${sourceDir.path}/photo5.png')
-        ..writeAsBytesSync(_validPngBytes, flush: true);
-      final domain.EvidenceAsset asset = await storage.captureFromFile(
-        incidentId: incident.id,
-        sourcePath: source.path,
-        documentType: domain.EvidenceDocumentType.photo,
-        mimeType: 'image/png',
-        extension: 'png',
-      );
-      await repository.registerEvidenceAsset(asset);
+      late String incidentId;
+      late domain.EvidenceAsset asset;
+
+      await tester.runAsync(() async {
+        final domain.Incident incident = await repository.createIncident(
+          occurredAt: DateTime.utc(2026, 8, 19, 12),
+        );
+        incidentId = incident.id;
+        final File source = File('${sourceDir.path}/photo5.png')
+          ..writeAsBytesSync(_validPngBytes, flush: true);
+        asset = await storage.captureFromFile(
+          incidentId: incident.id,
+          sourcePath: source.path,
+          documentType: domain.EvidenceDocumentType.photo,
+          mimeType: 'image/png',
+          extension: 'png',
+        );
+        await repository.registerEvidenceAsset(asset);
+      });
 
       await tester.pumpWidget(
-        wrapPushed(EvidencePhotoViewerScreen(incidentId: incident.id, asset: asset)),
+        wrapPushed(EvidencePhotoViewerScreen(incidentId: incidentId, asset: asset)),
       );
       await settleWithRealIo(tester);
 
@@ -462,8 +472,15 @@ void main() {
       await tester.tap(find.text('Supprimer'));
       await settleWithRealIo(tester);
 
-      expect(await File(asset.localFilePath).exists(), isFalse);
-      expect(await repository.listEvidenceAssets(incident.id), isEmpty);
+      // Le bouton "Supprimer" déclenche la vraie suppression (fichier +
+      // DB) DEPUIS l'écran lui-même (`_delete()`), pas depuis ce bloc de
+      // test - ces vérifications post-suppression restent néanmoins de
+      // vrais appels dart:io/DB, protégés par `runAsync` par cohérence avec
+      // le reste du fichier.
+      await tester.runAsync(() async {
+        expect(await File(asset.localFilePath).exists(), isFalse);
+        expect(await repository.listEvidenceAssets(incidentId), isEmpty);
+      });
       expect(tester.takeException(), isNull);
     });
   });
