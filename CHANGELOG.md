@@ -56,21 +56,24 @@ sans nouveau chantier architectural, sur 8 points précis.
    rassemblant environnement de build, commit/tag, SHA du ZIP et de l'APK,
    statut `pubspec.lock`/`flutter analyze`/cahier de référence/CI GitHub en
    un seul endroit.
+6. **Cahier des charges v1.1 reçu et vérifié** (point 1 de la revue,
+   résolu après la clôture initiale de ce cycle) : le fichier
+   `ReserveFlash_Incident_Cahier_des_Charges_v1.1_LocalFirst.pdf` a été
+   déposé dans la conversation le 2026-08-19. `sha256sum` recalculé
+   indépendamment sur le fichier reçu ->
+   `1c6b3db672d9d622679ecd6c8b20908e575e2702eeb4dcc839609b21ea5ccd1b` -
+   identique au hash cité par l'équipe, confirmant l'authenticité du
+   fichier plutôt que de la supposer. Les 33 pages ont été lues
+   intégralement ; `docs/SPEC_BASELINE.md` mis à jour avec `SPEC_BASELINE`/
+   `SPEC_DATE`/`SPEC_SHA256` réels, et chaque clause précédemment "traitée
+   sans source numérotée" a désormais sa référence exacte (section/page) :
+   endpoint d'historique métier (section 9.2, p.19), chiffrement de
+   sauvegarde SEC-08 (p.20), formulation du Gate de sortie R0 (section 18,
+   p.29), exigences R4 intégrité/hashes/refus d'archive corrompue
+   (sections 8.2 et 18, p.17-18 et p.29).
 
 ### Explicitement PAS fait dans cette clôture (honnêteté du statut)
 
-- **Cahier des charges v1.1** : le document n'a toujours pas été fourni
-  dans un emplacement accessible à ce développeur (ni upload conversation,
-  ni dossier connecté), malgré la demande explicite renouvelée dans
-  `docs/SPEC_BASELINE.md` depuis R0.2. Le SHA-256 cité par l'équipe dans sa
-  revue (`1c6b3db672d9d622679ecd6c8b20908e575e2702eeb4dcc839609b21ea5ccd1b`)
-  n'a pas pu être vérifié indépendamment contre un fichier réel - il n'a
-  donc **volontairement pas** été inscrit dans `SPEC_BASELINE.md`.
-  Inscrire une référence à un document jamais vu casserait exactement le
-  principe "GATE zéro invention" que ce projet applique à son propre
-  contenu métier ET à sa documentation de traçabilité. **Le fichier PDF
-  v1.1 doit être déposé dans la conversation ou le dossier connecté pour
-  que ce point puisse être clos.**
 - **Exécution réelle de la CI GitHub Actions** : ce bac à sable n'est pas
   connecté à un dépôt GitHub distant, aucun push n'a été effectué. Le
   fichier YAML est valide et aligné sur Flutter 3.47.0, mais son

@@ -76,14 +76,15 @@ projet.
 
 ## Cahier des charges de référence
 
-**Non résolu dans cette clôture** - voir `docs/SPEC_BASELINE.md`. Le
-cahier v1.1 n'a toujours pas été fourni dans un emplacement accessible à
-ce développeur (ni upload conversation, ni dossier connecté). Le SHA-256
-cité par l'équipe (`1c6b3db672d9d622679ecd6c8b20908e575e2702eeb4dcc839609b21ea5ccd1b`)
-n'a pas pu être vérifié indépendamment contre un fichier réel, et n'a donc
-PAS été inscrit dans `SPEC_BASELINE.md` - l'inscrire sans avoir vu le
-fichier reviendrait à casser le principe "GATE zéro invention" que ce
-projet applique aussi à sa propre documentation de traçabilité.
+**Résolu après la clôture initiale, dans le même cycle R0.2.2** - voir
+`docs/SPEC_BASELINE.md`. Le cahier v1.1 a été déposé dans la conversation
+le 2026-08-19 ; son SHA-256 a été recalculé indépendamment par ce
+développeur (`sha256sum`) et confirmé **identique** au hash cité par
+l'équipe (`1c6b3db672d9d622679ecd6c8b20908e575e2702eeb4dcc839609b21ea5ccd1b`).
+Les 33 pages ont été lues intégralement ; les clauses citées dans les
+retours de recette (endpoint d'historique, chiffrement de sauvegarde,
+formulation du Gate R0, R4 intégrité) ont chacune une source exacte
+(section/page) désormais consignée dans `SPEC_BASELINE.md`.
 
 ## CI GitHub Actions réelle
 
