@@ -1,3 +1,25 @@
+[build-system]
+# R0.2.2 (bug decouvert par la premiere execution reelle de la CI GitHub
+# Actions - voir CHANGELOG.md) : sans cette section, pip choisit quand meme
+# setuptools par defaut, mais laisse sa decouverte automatique de paquets
+# scanner tout `backend/` en "flat layout". Ce dossier contient DEUX
+# repertoires au premier niveau avec du code Python (`app/` et `alembic/`),
+# donc setuptools >= 61 refuse de construire ("Multiple top-level packages
+# discovered in a flat-layout") - erreur jamais vue localement car les
+# tests tournent via `pytest` (qui utilise `pythonpath = ["."]` ci-dessous
+# sans jamais installer le paquet), pas via `pip install -e ".[dev]"` comme
+# le fait la CI. D'ou la necessite de lister explicitement le paquet a
+# construire.
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# Seul `app/` est le paquet applicatif a installer. `alembic/` (migrations,
+# invoquees via la CLI `alembic` depuis le dossier `backend/`, pas via un
+# import Python) et `tests/`/`scripts/` ne doivent pas etre traites comme
+# des paquets installables.
+include = ["app*"]
+
 [project]
 name = "reserveflash-backend"
 version = "0.1.0"

@@ -8,3 +8,7 @@ htmlcov/
 venv/
 .env
 !.env.example
+
+# R0.2.2 : genere localement par `pip install -e .` maintenant que
+# pyproject.toml declare un vrai build-system (voir CHANGELOG.md).
+*.egg-info/

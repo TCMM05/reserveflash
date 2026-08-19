@@ -98,6 +98,44 @@ fois précédentes, depuis un mélange UTF-8/UTF-16LE produit par PowerShell) :
   (non exigée explicitement ailleurs dans le cahier). Consigné ici par
   souci de transparence plutôt que passé sous silence.
 
+### CI GitHub Actions - premier run réel, bug trouvé et corrigé (2026-08-19)
+
+Le dépôt a été poussé vers un dépôt GitHub réel (`TCMM05/reserveflash`,
+historique et tags complets préservés via `git bundle`) pour la toute
+première exécution de `.github/workflows/ci.yml` sur un vrai runner - le
+seul point de la revue R0.2.2 qui ne pouvait pas être prouvé depuis ce bac
+à sable.
+
+Cette première exécution réelle a immédiatement révélé un bug invisible
+jusqu'ici : le job `backend` échouait dès l'étape `pip install -e
+".[dev]"` avec `error: Multiple top-level packages discovered in a
+flat-layout: ['app', 'alembic']`. Root cause : `backend/pyproject.toml` ne
+déclarait aucune section `[build-system]`/`[tool.setuptools.packages.find]`
+; setuptools scanne alors tout `backend/` et trouve DEUX répertoires
+Python de premier niveau (`app/` et `alembic/`), et refuse de construire
+sans instruction explicite. Ce bug n'était jamais apparu localement car
+les tests tournent via `pytest` (qui utilise `pythonpath = ["."]` et
+n'installe jamais le paquet), jamais via une installation `pip` réelle -
+exactement le type de bug que seule une vraie CI peut révéler.
+
+Corrigé dans `backend/pyproject.toml` : ajout de `[build-system]`
+(`setuptools>=68`) et de `[tool.setuptools.packages.find]` avec `include =
+["app*"]` pour ne déclarer que le paquet applicatif `app` (ni `alembic/`,
+invoqué via sa CLI et non importé, ni `tests/`/`scripts/`). Reproduit et
+vérifié dans cet environnement cloud, dans un environnement Python 3.12
+propre créé pour l'occasion : échec identique reproduit AVANT le correctif
+(`Getting requirements to build editable` échoue), puis succès confirmé
+APRÈS (`Successfully installed ... reserveflash-backend-0.1.0`, `import
+app` fonctionne, `ruff check` toujours vert). `backend/.gitignore` complété
+avec `*.egg-info/` (artefact généré localement par cette installation).
+
+**Statut à ce stade** : le bug qui bloquait le tout premier step du job
+`backend` est corrigé et vérifié en local (reproduction de l'échec puis du
+succès). Le nouveau commit doit encore être repoussé vers
+`TCMM05/reserveflash` pour confirmer un run CI complet et vert sur le vrai
+runner GitHub - voir la suite du fil de discussion / le prochain commit
+pour le résultat.
+
 ### Explicitement PAS fait dans cette clôture (honnêteté du statut)
 
 - **Exécution réelle de la CI GitHub Actions** : ce bac à sable n'est pas
