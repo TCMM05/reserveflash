@@ -49,6 +49,43 @@ _PROMPTS_DIR = Path(__file__).resolve().parents[4] / "prompts"
 
 _OUTPUT_KEYS = {"issue_type_candidate", "fields", "requires_review", "most_uncertain_field"}
 
+# Bug réel diagnostiqué en test terrain R2 (émulateur Android, GATE R2) :
+# OpenAI détermine le format audio de `/v1/audio/transcriptions` à partir de
+# l'EXTENSION du nom de fichier envoyé en multipart, jamais du `Content-Type`
+# - un nom de fichier sans extension (ex: "audio") est systématiquement
+# rejeté en 400 "Unrecognized file format", MÊME pour un contenu audio
+# parfaitement valide (constaté avec un vrai .m4a enregistré par l'app).
+# Formats supportés par l'API (message d'erreur OpenAI observé) : flac, m4a,
+# mp3, mp4, mpeg, mpga, oga, ogg, wav, webm.
+_MIME_TYPE_TO_EXTENSION = {
+    "audio/flac": "flac",
+    "audio/x-flac": "flac",
+    "audio/m4a": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/mp3": "mp3",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "mp4",
+    "audio/mpga": "mpga",
+    "audio/oga": "oga",
+    "audio/ogg": "ogg",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/webm": "webm",
+}
+
+
+def _audio_filename_for_mime_type(mime_type: str) -> str:
+    """Nom de fichier multipart avec extension, dérivé de [mime_type] -
+    voir la note ci-dessus (_MIME_TYPE_TO_EXTENSION) : OpenAI a besoin d'une
+    extension reconnue dans le nom, pas seulement du Content-Type. Repli sur
+    le sous-type MIME tel quel (ex: "audio/aac" -> "audio.aac") si absent de
+    la table - jamais un nom sans extension, qui échoue à coup sûr."""
+    extension = _MIME_TYPE_TO_EXTENSION.get(mime_type.lower())
+    if extension is None:
+        _, _, subtype = mime_type.partition("/")
+        extension = subtype.strip().lower() or "bin"
+    return f"audio.{extension}"
+
 
 def _load_prompt(prompt_version: str) -> str:
     path = _PROMPTS_DIR / f"{prompt_version}.txt"
@@ -92,7 +129,13 @@ class OpenAIProvider(AIProvider):
             response = self._client.post(
                 "/audio/transcriptions",
                 data={"model": self._transcription_model, "response_format": "json"},
-                files={"file": ("audio", audio_bytes, mime_type)},
+                files={
+                    "file": (
+                        _audio_filename_for_mime_type(mime_type),
+                        audio_bytes,
+                        mime_type,
+                    )
+                },
             )
         except httpx.TimeoutException as exc:
             raise AIUnavailableError("Timeout OpenAI (transcription).") from exc
@@ -252,17 +295,6 @@ class OpenAIProvider(AIProvider):
     def _raise_for_provider_errors(response: httpx.Response, *, context: str) -> None:
         if response.status_code == httpx.codes.TOO_MANY_REQUESTS:
             raise AIRateLimitedError(f"OpenAI a limité le débit ({context}).")
-        if response.status_code >= 400:
-            # DEBUG TEMPORAIRE (diagnostic terrain R2, à retirer une fois la
-            # cause du 403/503 observé identifiée avec certitude) : affiche
-            # le corps d'erreur OpenAI complet UNIQUEMENT dans les logs
-            # serveur locaux (console uvicorn) - jamais renvoyé au client
-            # mobile, qui reçoit toujours le message générique ci-dessous
-            # (aucune fuite de détail sensible côté app).
-            print(
-                f"[DEBUG OpenAI {context}] status={response.status_code} "
-                f"body={response.text[:2000]!r}"
-            )
         if response.status_code >= 500:
             raise AIUnavailableError(
                 f"OpenAI indisponible ({context}), statut {response.status_code}."

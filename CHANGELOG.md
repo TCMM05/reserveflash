@@ -2,6 +2,35 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.7] - R2 - correctif transcription OpenAI : nom de fichier sans extension (backend) - 2026-08-20
+
+Corrigé lors du premier test terrain réel (émulateur Android + backend
+local + vraie clé OpenAI, GATE R2) : `OpenAIProvider.transcribe`
+(`backend/app/infrastructure/ai/openai_provider.py`) envoyait à
+`/v1/audio/transcriptions` un fichier multipart nommé littéralement
+`"audio"`, sans extension. OpenAI détermine le format audio depuis
+l'EXTENSION du nom de fichier, jamais depuis le `Content-Type` - un nom
+sans extension est systématiquement rejeté (`400 Unrecognized file
+format`), y compris pour un contenu audio parfaitement valide (constaté
+avec un vrai `.m4a` enregistré par l'app mobile). Ce bug était masqué côté
+app par le message générique `AIUnavailableError` (GATE secret - jamais de
+détail de statut/erreur provider exposé au client mobile), rendant le
+diagnostic à distance nécessaire (log temporaire côté serveur, retiré une
+fois la cause confirmée).
+
+Correction : `_audio_filename_for_mime_type` dérive un nom de fichier avec
+extension reconnue (`audio.m4a`, `audio.wav`, ...) depuis le `mime_type`
+réel de la preuve capturée, avec repli sur le sous-type MIME si absent de
+la table plutôt qu'un nom nu. Nouveau test
+`test_transcribe_sends_filename_with_extension_matching_mime_type`
+(`backend/tests/infrastructure/test_openai_provider.py`) vérifie que le nom
+de fichier envoyé porte bien l'extension attendue - garde contre une
+régression silencieuse (ce bug ne se voyait dans AUCUN test existant,
+puisqu'ils mockent le transport sans jamais inspecter le nom de fichier
+multipart).
+
+Aucun changement mobile - uniquement le provider backend.
+
 ## [0.3.6] - R2 - câblage réel écran de revue des faits + réserve (mobile) - 2026-08-20
 
 Cinquième lot mobile de R2. Jusqu'ici, `facts_review_screen.dart` (S11) et

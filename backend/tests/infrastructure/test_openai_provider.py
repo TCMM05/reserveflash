@@ -74,6 +74,36 @@ def test_transcribe_success():
     assert result.provider == "openai"
 
 
+def test_transcribe_sends_filename_with_extension_matching_mime_type():
+    # Bug réel diagnostiqué en test terrain R2 (émulateur Android) : OpenAI
+    # détermine le format audio depuis l'EXTENSION du nom de fichier
+    # multipart, pas depuis le Content-Type - un nom sans extension (ex:
+    # "audio") est rejeté en 400 "Unrecognized file format" même pour un
+    # contenu valide (voir _audio_filename_for_mime_type). Ce test vérifie
+    # que le nom de fichier envoyé porte bien une extension reconnue par
+    # OpenAI, dérivée du mime_type réel (ex: "audio/m4a" -> "audio.m4a"),
+    # jamais un nom nu.
+    captured_filenames: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        content_disposition = next(
+            (
+                part
+                for part in request.content.split(b"\r\n")
+                if b"filename=" in part
+            ),
+            b"",
+        )
+        captured_filenames.append(content_disposition.decode())
+        return httpx.Response(200, json={"text": "ok"})
+
+    provider = _provider_with_transport(handler)
+    provider.transcribe(b"fake-audio-bytes", "audio/m4a")
+
+    assert len(captured_filenames) == 1
+    assert 'filename="audio.m4a"' in captured_filenames[0]
+
+
 def test_transcribe_timeout_raises_ai_unavailable():
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.TimeoutException("boom", request=request)
