@@ -26,10 +26,36 @@
 /// politique plus fine (ex : ne jamais retenter un `AiInvalidOutputException`,
 /// qui a peu de chances de réussir sur la même entrée) est un raffinement
 /// possible, non nécessaire pour ce premier câblage bout en bout.
+///
+/// Optimisation coût IA (deux points, ajoutés après le premier câblage) :
+///
+/// 1. **Une note vocale n'est JAMAIS transcrite deux fois pour produire un
+///    seul candidat.** `AiOperationKind.transcribeAudio` ne fait QUE
+///    transcrire, puis met en file une opération séparée
+///    (`extractFromTranscript`, payload = le transcript déjà obtenu) pour
+///    l'extraction. Si l'extraction échoue et doit être retentée (réseau,
+///    quota...), seul CET appel - déjà gratuit, le transcript est en main -
+///    est refait : la transcription déjà payée en tokens n'est jamais
+///    reperdue. Avant ce découpage, un échec d'extraction après une
+///    transcription réussie faisait retenter les DEUX appels au prochain
+///    passage, gaspillant les tokens de transcription à chaque tentative.
+/// 2. **`IncidentRepository.enqueueAiOperation` est idempotent par
+///    `idempotencyKey`** (voir sa docstring) : une mise en file en double de
+///    la même opération (double-tap, retry applicatif) ne déclenche jamais
+///    deux appels IA payants pour un contenu identique.
+///
+/// Conséquence pour [AiQueueProcessor.processPendingOperations] : une
+/// opération `transcribeAudio` traitée avec succès crée un NOUVEL item
+/// `pending` (`extractFromTranscript`) - ce fichier boucle donc sur
+/// plusieurs "rounds" au sein d'un même appel (voir sa docstring) pour que
+/// la chaîne complète progresse en un seul appel côté appelant (écran),
+/// plutôt que d'exiger un deuxième appel explicite pour l'étape suivante.
 library;
 
 import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 
 import '../domain/entities/ai_queue_item.dart';
 import '../domain/entities/candidate_fact_set.dart';
@@ -39,7 +65,48 @@ import 'local/evidence_storage.dart';
 import 'remote/ai_api_client.dart';
 
 /// Voir docstring de fichier : disjoncteur de retry, appliqué uniformément.
-const int defaultAiQueueMaxRetryCount = 5;
+/// Volontairement bas (retour d'équipe, exigence coût IA point 7 - "jamais
+/// de boucle automatique", "une erreur persistante doit basculer vers
+/// saisie manuelle/UNKNOWN") : tant que `facts_review_screen.dart` ne
+/// consomme pas encore le statut de la file pour proposer cette bascule
+/// manuelle explicitement (voir docs/GATE_R2_STATUS.md, "Reste à faire"),
+/// ce disjoncteur reste la seule protection contre un item qui resterait
+/// silencieusement retenté indéfiniment - une valeur basse limite le
+/// nombre d'appels IA payants gaspillés sur une source qui échoue de façon
+/// persistante, en attendant cette bascule UI réelle.
+const int defaultAiQueueMaxRetryCount = 2;
+
+/// Version du pipeline mobile de traitement IA (transcription + extraction)
+/// - à incrémenter si sa logique change de façon à invalider un résultat
+/// déjà obtenu avec une version antérieure. Fait partie de la clé
+/// d'idempotence (voir [aiOperationIdempotencyKey]) - composition imposée
+/// par le retour d'équipe (exigence coût IA, point 8) :
+/// `incident_id + operation_type + source_hash + pipeline_version`.
+const String aiPipelineVersion = 'ai_pipeline.v1';
+
+/// Construit la clé d'idempotence d'une opération IA - voir
+/// [aiPipelineVersion]. [sourceHash] doit être une empreinte STABLE de la
+/// donnée source de CETTE étape (le SHA-256 déjà calculé de l'audio pour
+/// `transcribeAudio`, un SHA-256 du texte transcrit pour
+/// `extractFromTranscript`, etc.), jamais un identifiant généré aléatoirement
+/// à chaque appel (un id aléatoire romprait toute déduplication réelle).
+/// Utilisée par TOUS les points de mise en file (écran, ce processeur) pour
+/// que deux mises en file de la même opération sur la même source ne créent
+/// jamais un doublon qui déclencherait un appel IA payant superflu (voir
+/// `IncidentRepository.enqueueAiOperation`, idempotent par cette clé).
+String aiOperationIdempotencyKey({
+  required String incidentId,
+  required AiOperationKind operationKind,
+  required String sourceHash,
+  String pipelineVersion = aiPipelineVersion,
+}) {
+  return '$incidentId:${operationKind.name}:$sourceHash:$pipelineVersion';
+}
+
+/// SHA-256 hexadécimal d'un texte - utilisé comme `sourceHash` pour les
+/// opérations dont la source est déjà du texte (ex : `extractFromTranscript`,
+/// dont la source est le transcript lui-même, pas un fichier sur disque).
+String sha256OfText(String text) => sha256.convert(utf8.encode(text)).toString();
 
 /// Miroir de la valeur par défaut `Settings.prompt_version`
 /// (`backend/app/config.py`). V1 : pas encore synchronisée dynamiquement
@@ -68,7 +135,34 @@ final class TranscribeAudioPayload {
   String encode() => jsonEncode(toJson());
 }
 
+/// Contrat du payload JSON pour `AiOperationKind.extractFromTranscript` -
+/// contient directement le texte du transcript (pas une référence à
+/// relire ailleurs) : ce texte EST la donnée minimale nécessaire à cette
+/// étape (point 14), le récupérer par référence à l'item `transcribeAudio`
+/// d'origine n'apporterait aucun bénéfice et ajouterait une indirection.
+final class ExtractFromTranscriptPayload {
+  const ExtractFromTranscriptPayload({required this.transcript});
+
+  factory ExtractFromTranscriptPayload.fromJson(Map<String, dynamic> json) {
+    return ExtractFromTranscriptPayload(transcript: json['transcript'] as String);
+  }
+
+  final String transcript;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{'transcript': transcript};
+
+  String encode() => jsonEncode(toJson());
+}
+
 enum AiQueueProcessingOutcome { succeeded, failed, skipped }
+
+/// Nombre maximal de "rounds" par appel à
+/// [AiQueueProcessor.processPendingOperations] (voir sa docstring) - garde
+/// bornée, généreuse par rapport à la profondeur réelle de chaîne connue à
+/// ce jour (2 : transcribeAudio -> extractFromTranscript), pour ne jamais
+/// boucler indéfiniment si une future opération créait elle-même une chaîne
+/// plus longue par erreur.
+const int defaultAiQueueMaxRoundsPerCall = 5;
 
 /// Résultat agrégé d'un passage sur la file - destiné à l'appelant (écran,
 /// futur listener de connectivité) qui peut vouloir afficher/journaliser un
@@ -101,6 +195,7 @@ final class AiQueueProcessor {
     required AiApiClient aiApiClient,
     required EvidenceStorageService evidenceStorage,
     this.maxRetryCount = defaultAiQueueMaxRetryCount,
+    this.maxRoundsPerCall = defaultAiQueueMaxRoundsPerCall,
     this.extractionPromptVersion = defaultExtractionPromptVersion,
   })  : _incidentRepository = incidentRepository,
         _aiApiClient = aiApiClient,
@@ -110,28 +205,46 @@ final class AiQueueProcessor {
   final AiApiClient _aiApiClient;
   final EvidenceStorageService _evidenceStorage;
   final int maxRetryCount;
+  final int maxRoundsPerCall;
   final String extractionPromptVersion;
 
-  /// Traite tous les items actuellement `pending` (un snapshot au moment de
-  /// l'appel - un item mis en file pendant ce traitement n'est PAS repris
-  /// dans le même passage, il attendra le prochain appel).
+  /// Traite les items `pending` de la file, en plusieurs "rounds" si
+  /// nécessaire (optimisation coût IA - voir docstring de fichier) : un item
+  /// traité avec succès peut lui-même mettre en file un NOUVEL item
+  /// (`transcribeAudio` -> `extractFromTranscript`) - ce nouvel item est
+  /// repris DANS LE MÊME appel (round suivant), pour que la chaîne complète
+  /// progresse sans exiger un deuxième appel explicite côté appelant.
+  /// Chaque item n'est traité QU'UNE FOIS par appel (même s'il reste
+  /// `pending` après - ex : disjoncteur de retry, kind non supporté), pour
+  /// garantir que la boucle termine ; borné en plus par [maxRoundsPerCall]
+  /// par sécurité.
   Future<AiQueueProcessingSummary> processPendingOperations() async {
-    final List<AiQueueItem> pending = await _incidentRepository.listPendingAiOperations();
     int succeeded = 0;
     int failed = 0;
     int skipped = 0;
-    for (final AiQueueItem item in pending) {
-      final AiQueueProcessingOutcome outcome = await _processOne(item);
-      switch (outcome) {
-        case AiQueueProcessingOutcome.succeeded:
-          succeeded++;
-          break;
-        case AiQueueProcessingOutcome.failed:
-          failed++;
-          break;
-        case AiQueueProcessingOutcome.skipped:
-          skipped++;
-          break;
+    final Set<String> processedIds = <String>{};
+
+    for (int round = 0; round < maxRoundsPerCall; round++) {
+      final List<AiQueueItem> pending = await _incidentRepository.listPendingAiOperations();
+      final List<AiQueueItem> toProcess =
+          pending.where((AiQueueItem item) => !processedIds.contains(item.id)).toList();
+      if (toProcess.isEmpty) {
+        break;
+      }
+      for (final AiQueueItem item in toProcess) {
+        processedIds.add(item.id);
+        final AiQueueProcessingOutcome outcome = await _processOne(item);
+        switch (outcome) {
+          case AiQueueProcessingOutcome.succeeded:
+            succeeded++;
+            break;
+          case AiQueueProcessingOutcome.failed:
+            failed++;
+            break;
+          case AiQueueProcessingOutcome.skipped:
+            skipped++;
+            break;
+        }
       }
     }
     return AiQueueProcessingSummary(succeeded: succeeded, failed: failed, skipped: skipped);
@@ -168,12 +281,23 @@ final class AiQueueProcessor {
     }
   }
 
-  static bool _isSupported(AiOperationKind kind) => kind == AiOperationKind.transcribeAudio;
+  static bool _isSupported(AiOperationKind kind) {
+    switch (kind) {
+      case AiOperationKind.transcribeAudio:
+      case AiOperationKind.extractFromTranscript:
+        return true;
+      case AiOperationKind.extractFromPhoto:
+      case AiOperationKind.extractFromDocument:
+        return false;
+    }
+  }
 
   Future<String> _run(AiQueueItem item) async {
     switch (item.operationKind) {
       case AiOperationKind.transcribeAudio:
         return _runTranscribeAudio(item);
+      case AiOperationKind.extractFromTranscript:
+        return _runExtractFromTranscript(item);
       case AiOperationKind.extractFromPhoto:
       case AiOperationKind.extractFromDocument:
         // Ne devrait jamais être atteint : `_isSupported` filtre déjà ces
@@ -187,13 +311,12 @@ final class AiQueueProcessor {
     }
   }
 
-  /// Pipeline complet d'une note vocale déjà capturée : transcription puis
-  /// extraction de faits candidats puis persistance - `AiOperationKind`
-  /// décrit la SOURCE de l'opération (une note vocale), pas un unique appel
-  /// HTTP : il n'existe pas de kind "extraction depuis transcript" séparé
-  /// car une transcription seule n'a aucune valeur pour la revue utilisateur
-  /// (section 2.4 - candidat vs confirmé) sans être d'abord structurée en
-  /// `CandidateFactData`.
+  /// Première étape d'une note vocale déjà capturée : transcription
+  /// UNIQUEMENT. Met en file une opération `extractFromTranscript` séparée
+  /// pour la suite (optimisation coût IA - voir docstring de fichier) au
+  /// lieu d'enchaîner l'extraction directement ici : si l'extraction échoue
+  /// et doit être retentée, la transcription (déjà payée en tokens) n'est
+  /// alors jamais refaite.
   Future<String> _runTranscribeAudio(AiQueueItem item) async {
     final String? issueId = item.issueId;
     if (issueId == null) {
@@ -229,8 +352,57 @@ final class AiQueueProcessor {
       mimeType: asset.mimeType,
     );
 
+    // idempotencyKey dérivée du CONTENU du transcript (pas de l'id de cet
+    // item) : deux transcriptions produisant le même texte pour le même
+    // incident (ex : ce même item retraité par extraordinaire après avoir
+    // déjà réussi - ne devrait jamais arriver, un item `done` ne réapparaît
+    // plus dans `listPendingAiOperations` - ou une source strictement
+    // identique) partagent la même clé, donc jamais deux appels
+    // d'extraction payants pour un contenu identique (défense en
+    // profondeur, pas le mécanisme principal).
+    final ExtractFromTranscriptPayload nextPayload =
+        ExtractFromTranscriptPayload(transcript: transcription.text);
+    final AiQueueItem nextItem = await _incidentRepository.enqueueAiOperation(
+      incidentId: item.incidentId,
+      issueId: issueId,
+      operationKind: AiOperationKind.extractFromTranscript,
+      payloadJson: nextPayload.encode(),
+      idempotencyKey: aiOperationIdempotencyKey(
+        incidentId: item.incidentId,
+        operationKind: AiOperationKind.extractFromTranscript,
+        sourceHash: sha256OfText(transcription.text),
+      ),
+    );
+
+    return jsonEncode(<String, dynamic>{
+      'transcript': transcription.text,
+      'extract_operation_id': nextItem.id,
+    });
+  }
+
+  /// Deuxième étape (voir [_runTranscribeAudio]) : extraction de faits
+  /// candidats depuis un transcript DÉJÀ obtenu, puis persistance. Ne
+  /// rappelle JAMAIS `AiApiClient.transcribe` - c'est tout le point de la
+  /// séparation en deux opérations (optimisation coût IA).
+  Future<String> _runExtractFromTranscript(AiQueueItem item) async {
+    final String? issueId = item.issueId;
+    if (issueId == null) {
+      // Toujours fourni par `_runTranscribeAudio` ci-dessus lors de la mise
+      // en file - un item `extractFromTranscript` sans issueId ne peut
+      // provenir que d'un futur appelant qui contournerait ce chemin
+      // normal, jamais un état attendu.
+      throw StateError(
+        'AiQueueItem ${item.id} (extractFromTranscript) sans issueId : '
+        'impossible de persister un CandidateFactSet.',
+      );
+    }
+
+    final ExtractFromTranscriptPayload payload = ExtractFromTranscriptPayload.fromJson(
+      jsonDecode(item.payloadJson) as Map<String, dynamic>,
+    );
+
     final AiExtractionResult extraction = await _aiApiClient.extractCandidateFacts(
-      transcript: transcription.text,
+      transcript: payload.transcript,
       promptVersion: extractionPromptVersion,
     );
 
@@ -244,9 +416,6 @@ final class AiQueueProcessor {
       model: extraction.modelId,
     );
 
-    return jsonEncode(<String, dynamic>{
-      'transcript': transcription.text,
-      'candidate_fact_set_id': saved.id,
-    });
+    return jsonEncode(<String, dynamic>{'candidate_fact_set_id': saved.id});
   }
 }

@@ -2,6 +2,57 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.5] - R2 - optimisation coût IA (mobile) + inventaire exigences équipe - 2026-08-20
+
+Quatrième lot mobile de R2, en réponse directe au retour d'équipe "Exigences
+R2 - maîtrise des coûts et tokens IA" (14 points, voir
+`docs/GATE_R2_STATUS.md` section dédiée pour l'inventaire complet point par
+point). Corrige/complète `[0.3.4]` sur deux axes précis, et documente
+honnêtement tout ce qui reste à faire côté backend/benchmark.
+
+1. **`mobile/lib/data/ai_queue_processor.dart`** - `AiOperationKind.transcribeAudio`
+   ne fait plus QUE transcrire : l'extraction est désormais une opération
+   séparée et retentable indépendamment (`AiOperationKind.extractFromTranscript`,
+   payload = transcript déjà obtenu). Avant ce changement, un échec
+   d'extraction APRÈS une transcription réussie faisait retenter les DEUX
+   appels au prochain passage - la transcription déjà payée en tokens était
+   regaspillée à chaque tentative. `processPendingOperations` boucle
+   désormais sur plusieurs "rounds" bornés (`maxRoundsPerCall`, défaut 5)
+   pour que la chaîne complète progresse en un seul appel côté écran.
+2. **Idempotence conforme à la composition exigée par l'équipe** (point 8 -
+   `incident_id + operation_type + source_hash + pipeline_version`) : nouvelle
+   fonction `aiOperationIdempotencyKey` + `aiPipelineVersion`, utilisées par
+   TOUS les points de mise en file. `sourceHash` = SHA-256 déjà calculé de
+   l'audio (jamais un id généré aléatoirement) pour `transcribeAudio`, SHA-256
+   du transcript pour `extractFromTranscript`. `IncidentRepository.enqueueAiOperation`
+   (`local_incident_repository.dart`) vérifie désormais l'existence d'un item
+   avec la même clé AVANT toute insertion - une mise en file en double ne
+   crée jamais de doublon.
+3. **Disjoncteur de retry abaissé de 5 à 2 tentatives par défaut**
+   (`defaultAiQueueMaxRetryCount`) - alignement avec le point 7 de l'équipe
+   ("jamais de boucle automatique", "une erreur persistante doit basculer
+   vers saisie manuelle/UNKNOWN"). Alignement partiel seulement : la vraie
+   bascule vers saisie manuelle/UNKNOWN nécessite `facts_review_screen.dart`
+   (pas encore connecté à la file), voir limitation documentée dans le code.
+4. **`mobile/lib/domain/entities/ai_queue_item.dart`** - nouvelle valeur
+   `AiOperationKind.extractFromTranscript` (mapping wire ajouté dans
+   `local_incident_repository.dart`, aucune migration Drift nécessaire -
+   colonne texte libre côté schéma).
+5. Tests mis à jour/ajoutés dans `ai_queue_processor_test.dart` : preuve
+   explicite qu'un échec d'extraction après transcription réussie ne
+   rappelle JAMAIS `/v1/ai/transcribe` au retry, et qu'une mise en file en
+   double (même `incidentId`/`operationKind`/`sourceHash`) ne crée jamais de
+   doublon.
+
+**Ce lot NE couvre PAS** les 12 autres points du retour d'équipe (OCR local,
+journal de consommation backend, métriques coût benchmark, circuit breaker
+budgétaire production, séparation clés DEV/TEST vs PROD, limite de tokens de
+sortie/schema strict, sélection du modèle le moins cher par benchmark,
+détection "source inchangée -> ne pas rappeler" au-delà de la simple
+déduplication de mise en file) - voir `docs/GATE_R2_STATUS.md`, nouvelle
+section "Exigences coût/tokens IA (retour équipe)" pour l'inventaire complet,
+honnête et non filtré, de ce qui est fait vs pas commencé.
+
 ## [0.3.4] - R2 - câblage AiOperationQueue (mobile) - 2026-08-20
 
 Troisième lot mobile de R2 : la pièce qui relie enfin `AiApiClient`

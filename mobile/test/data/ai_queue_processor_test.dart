@@ -149,6 +149,10 @@ void main() {
     required String incidentId,
     required String evidenceAssetId,
     String? issueId,
+    // Un test peut vouloir prouver la déduplication même quand l'appelant
+    // ne connaît que l'id de la preuve (pas son sha256) - repli identique à
+    // celui de voice_description_screen.dart.
+    String? sourceHash,
   }) async {
     final TranscribeAudioPayload payload = TranscribeAudioPayload(evidenceAssetId: evidenceAssetId);
     return repository.enqueueAiOperation(
@@ -156,14 +160,18 @@ void main() {
       issueId: issueId,
       operationKind: AiOperationKind.transcribeAudio,
       payloadJson: payload.encode(),
-      idempotencyKey: 'transcribe_audio:$evidenceAssetId',
+      idempotencyKey: aiOperationIdempotencyKey(
+        incidentId: incidentId,
+        operationKind: AiOperationKind.transcribeAudio,
+        sourceHash: sourceHash ?? evidenceAssetId,
+      ),
     );
   }
 
   group('AiQueueProcessor - transcribeAudio, succès', () {
     test(
-      'transcrit puis extrait puis persiste un CandidateFactSet, marque '
-      "l'opération 'done'",
+      'transcrit (round 1) puis extrait et persiste un CandidateFactSet '
+      "(round 2), en un seul appel à processPendingOperations",
       () async {
         final domain.Incident incident = await _seedIncidentWithIssue();
         final List<domain.Issue> issues = await repository.listIssues(incident.id);
@@ -186,7 +194,10 @@ void main() {
 
         final AiQueueProcessingSummary summary = await processor.processPendingOperations();
 
-        expect(summary.succeeded, 1);
+        // 2 succès : l'item transcribeAudio (round 1) ET l'item
+        // extractFromTranscript qu'il a mis en file (round 2), traité dans
+        // le MÊME appel - voir docstring de processPendingOperations.
+        expect(summary.succeeded, 2);
         expect(summary.failed, 0);
         expect(summary.skipped, 0);
         expect(transport.calledPaths, <String>['/v1/ai/transcribe', '/v1/ai/extract']);
@@ -199,6 +210,100 @@ void main() {
         expect(candidate.candidateData.fields['expected_quantity']!.value, 8);
         expect(candidate.promptVersion, 'extraction_fr_v1');
         expect(candidate.model, 'gpt-4o-mini');
+      },
+    );
+  });
+
+  group('AiQueueProcessor - optimisation coût IA', () {
+    test(
+      "l'extraction échoue après une transcription réussie -> le retry ne "
+      'refait JAMAIS la transcription déjà payée en tokens',
+      () async {
+        final domain.Incident incident = await _seedIncidentWithIssue();
+        final List<domain.Issue> issues = await repository.listIssues(incident.id);
+        final domain.EvidenceAsset asset = await _seedAudioAsset(incident.id);
+        await _enqueueTranscribeAudio(
+          incidentId: incident.id,
+          evidenceAssetId: asset.id,
+          issueId: issues.first.id,
+        );
+
+        // Premier passage : la transcription réussit, mais l'extraction
+        // tombe en panne réseau juste après (ex : coupure entre les deux
+        // appels).
+        final _FakeAiHttpTransport firstAttemptTransport = _FakeAiHttpTransport(
+          const <String, AiHttpResponse>{'/v1/ai/transcribe': _successfulTranscribeResponse},
+          transportErrorPath: '/v1/ai/extract',
+        );
+        final AiQueueProcessor firstProcessor = AiQueueProcessor(
+          incidentRepository: repository,
+          aiApiClient: AiApiClient(firstAttemptTransport),
+          evidenceStorage: evidenceStorage,
+        );
+        final AiQueueProcessingSummary firstSummary = await firstProcessor.processPendingOperations();
+
+        expect(firstSummary.succeeded, 1); // transcribeAudio.
+        expect(firstSummary.failed, 1); // extractFromTranscript.
+        expect(firstAttemptTransport.calledPaths, <String>['/v1/ai/transcribe', '/v1/ai/extract']);
+        expect(await repository.listPendingAiOperations(), hasLength(1));
+
+        // Deuxième passage (ex : retour réseau) : SEULE l'extraction doit
+        // être retentée - la transcription ne doit JAMAIS être rappelée,
+        // même si le transport du deuxième passage la supporterait.
+        final _FakeAiHttpTransport secondAttemptTransport = _FakeAiHttpTransport(
+          const <String, AiHttpResponse>{
+            '/v1/ai/transcribe': _successfulTranscribeResponse,
+            '/v1/ai/extract': _successfulExtractResponse,
+          },
+        );
+        final AiQueueProcessor secondProcessor = AiQueueProcessor(
+          incidentRepository: repository,
+          aiApiClient: AiApiClient(secondAttemptTransport),
+          evidenceStorage: evidenceStorage,
+        );
+        final AiQueueProcessingSummary secondSummary = await secondProcessor.processPendingOperations();
+
+        expect(secondSummary.succeeded, 1); // extractFromTranscript, enfin.
+        expect(secondSummary.failed, 0);
+        expect(
+          secondAttemptTransport.calledPaths,
+          <String>['/v1/ai/extract'], // PAS '/v1/ai/transcribe'.
+        );
+
+        expect(await repository.listPendingAiOperations(), isEmpty);
+        final domain.CandidateFactSet? candidate =
+            await repository.latestCandidateFactSet(issues.first.id);
+        expect(candidate, isNotNull);
+      },
+    );
+
+    test(
+      'enqueueAiOperation avec la même idempotencyKey ne crée jamais de '
+      'doublon (jamais deux appels IA payants pour le même contenu)',
+      () async {
+        final domain.Incident incident = await _seedIncidentWithIssue();
+        final List<domain.Issue> issues = await repository.listIssues(incident.id);
+        final domain.EvidenceAsset asset = await _seedAudioAsset(incident.id);
+
+        // sourceHash = asset.sha256, comme le fait réellement
+        // voice_description_screen.dart (voir sa docstring) - preuve avec
+        // la même composition de clé qu'en production, pas juste un id
+        // arbitraire.
+        final AiQueueItem first = await _enqueueTranscribeAudio(
+          incidentId: incident.id,
+          evidenceAssetId: asset.id,
+          issueId: issues.first.id,
+          sourceHash: asset.sha256,
+        );
+        final AiQueueItem second = await _enqueueTranscribeAudio(
+          incidentId: incident.id,
+          evidenceAssetId: asset.id,
+          issueId: issues.first.id,
+          sourceHash: asset.sha256,
+        );
+
+        expect(second.id, first.id);
+        expect(await repository.listPendingAiOperations(), hasLength(1));
       },
     );
   });

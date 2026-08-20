@@ -664,6 +664,20 @@ final class LocalIncidentRepository implements IncidentRepository {
     required String idempotencyKey,
     String? issueId,
   }) async {
+    // Idempotence (retour d'équipe "exigences coût/tokens IA", point 8 -
+    // déduplication des jobs) : une opération déjà en
+    // file avec la MÊME idempotencyKey (quel que soit son statut - pending,
+    // in_progress, done...) est retournée telle quelle plutôt qu'un doublon
+    // inséré, qui referait sinon un appel IA payant pour un contenu
+    // identique (ex : `AiQueueProcessor` appelé deux fois par erreur pour la
+    // même preuve).
+    final AiOperationQueueData? existing = await (_db.select(_db.aiOperationQueue)
+          ..where((t) => t.idempotencyKey.equals(idempotencyKey)))
+        .getSingleOrNull();
+    if (existing != null) {
+      return _toDomainQueueItem(existing);
+    }
+
     final String id = _uuid.v4();
     final DateTime now = DateTime.now().toUtc();
     await _db.into(_db.aiOperationQueue).insert(
@@ -768,6 +782,8 @@ final class LocalIncidentRepository implements IncidentRepository {
         return 'extract_from_photo';
       case AiOperationKind.extractFromDocument:
         return 'extract_from_document';
+      case AiOperationKind.extractFromTranscript:
+        return 'extract_from_transcript';
     }
   }
 
@@ -779,6 +795,8 @@ final class LocalIncidentRepository implements IncidentRepository {
         return AiOperationKind.extractFromPhoto;
       case 'extract_from_document':
         return AiOperationKind.extractFromDocument;
+      case 'extract_from_transcript':
+        return AiOperationKind.extractFromTranscript;
       default:
         throw ArgumentError('operationKind inconnu: $value');
     }

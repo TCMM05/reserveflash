@@ -228,12 +228,23 @@ class _VoiceDescriptionScreenState extends ConsumerState<VoiceDescriptionScreen>
         return;
       }
       final TranscribeAudioPayload payload = TranscribeAudioPayload(evidenceAssetId: asset.id);
+      // sourceHash = SHA-256 déjà calculé à la capture (evidence_storage.dart)
+      // - jamais un id généré aléatoirement, pour que la clé d'idempotence
+      // (voir aiOperationIdempotencyKey) reflète vraiment le CONTENU de la
+      // note vocale (exigence coût IA de l'équipe, point 8). Repli
+      // défensif sur asset.id si sha256 était absent (ne devrait pas
+      // arriver en pratique, voir EvidenceStorageService.captureFromFile).
+      final String sourceHash = asset.sha256 ?? asset.id;
       await ref.read(incidentRepositoryProvider).enqueueAiOperation(
             incidentId: widget.incidentId,
             issueId: issues.first.id,
             operationKind: AiOperationKind.transcribeAudio,
             payloadJson: payload.encode(),
-            idempotencyKey: 'transcribe_audio:${asset.id}',
+            idempotencyKey: aiOperationIdempotencyKey(
+              incidentId: widget.incidentId,
+              operationKind: AiOperationKind.transcribeAudio,
+              sourceHash: sourceHash,
+            ),
           );
       // Déclenchement "online" au mieux-effort (point 6 - "si une opération
       // IA nécessite Internet : pending, retry possible à la reconnexion") :

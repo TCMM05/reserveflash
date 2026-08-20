@@ -135,12 +135,22 @@ corrigée.
     d'une preuve déjà capturée (nécessaire pour transmettre un audio à
     `AiApiClient.transcribe`), frontière stricte disque préservée.
   - `app/data/ai_queue_processor.dart` (`AiQueueProcessor`) - traite les
-    items `pending` de `AiOperationQueue` : transcription -> extraction ->
-    `saveCandidateFactSet`, pour `AiOperationKind.transcribeAudio`.
-    Disjoncteur de retry uniforme (5 tentatives par défaut) - au-delà, un
-    item reste `pending` en base sans être retenté automatiquement, rien
-    n'est supprimé. `extractFromPhoto`/`extractFromDocument` (OCR non câblé)
-    sont laissés intacts, jamais consommés pour un échec certain.
+    items `pending` de `AiOperationQueue`, en DEUX opérations distinctes et
+    retentables indépendamment (optimisation coût IA - un échec
+    d'extraction ne refait JAMAIS une transcription déjà payée en tokens) :
+    `AiOperationKind.transcribeAudio` (transcription seule) met en file
+    `AiOperationKind.extractFromTranscript` (extraction + `saveCandidateFactSet`,
+    payload = le transcript déjà obtenu). `processPendingOperations` boucle
+    sur plusieurs "rounds" pour que la chaîne complète progresse en un seul
+    appel côté écran. Disjoncteur de retry uniforme (2 tentatives par
+    défaut, volontairement bas - voir section "Exigences coût/tokens IA"
+    ci-dessous, point 7) - au-delà, un item reste `pending` en base sans
+    être retenté automatiquement, rien n'est supprimé. `extractFromPhoto`/
+    `extractFromDocument` (OCR non câblé) sont laissés intacts, jamais
+    consommés pour un échec certain. `IncidentRepository.enqueueAiOperation`
+    est idempotent par clé `incident_id + operation_type + source_hash +
+    pipeline_version` (une mise en file en double ne crée jamais un doublon
+    qui déclencherait un appel IA payant superflu).
   - `voice_description_screen.dart` (S10) - SEUL point de déclenchement
     câblé à ce stade : après l'enregistrement d'une note vocale, met en
     file une opération `transcribeAudio` (rattachée à la première anomalie
@@ -161,9 +171,120 @@ corrigée.
     à champs codés en dur, non connecté au pipeline) - consommateur de
     `latestCandidateFactSet`.
   - Écran/action pour réarmer manuellement un item bloqué par le
-    disjoncteur de retry de `AiQueueProcessor` (au-delà de 5 tentatives).
+    disjoncteur de retry de `AiQueueProcessor` (au-delà de 2 tentatives) -
+    la vraie bascule "saisie manuelle/UNKNOWN" exigée par l'équipe (voir
+    section suivante, point 7) nécessite ce câblage, pas encore fait.
   - `document_metadata_screen.dart` (S07, métadonnées BL - voir décision 4
     ci-dessus).
+
+## Exigences coût/tokens IA (retour équipe, 2026-08-20)
+
+L'équipe a fait remonter 14 exigences explicites de maîtrise des coûts/
+tokens IA pour R2. Inventaire honnête, point par point, vérifié par lecture
+de code (pas une auto-évaluation optimiste) - "présent" signifie vérifié
+dans le code cité, jamais "je pense que c'est fait".
+
+1. **Aucun retraitement inutile (empreinte/hash, jamais sur simple
+   réaffichage).** ⚠️ Partiel. Ouvrir/fermer un écran, redémarrer l'app ou
+   rouvrir un dossier ne déclenche AUCUN appel IA (l'enqueue n'existe que
+   dans `voice_description_screen.dart::_stopAndSaveRecording`, jamais dans
+   `build()`/`initState()`) - **conforme**. En revanche, il n'existe PAS
+   encore de vérification "un `CandidateFactSet` valide existe déjà pour
+   cette empreinte source, ne pas rappeler l'IA" avant l'enqueue lui-même -
+   seule la déduplication EN FILE (point 8) existe. Pas commencé : la
+   logique "source inchangée + résultat déjà valide -> skip silencieux".
+2. **Transcription séparée de l'extraction.** ✅ Fait (`[0.3.5]`) -
+   `AiQueueProcessor` : `transcribeAudio` puis `extractFromTranscript`,
+   deux opérations distinctes et retentables indépendamment. Backend :
+   `/v1/ai/transcribe` et `/v1/ai/extract` étaient déjà deux routes
+   séparées depuis l'origine.
+3. **OCR local prioritaire (ML Kit).** ❌ Pas commencé. Aucune photo de BL
+   n'est aujourd'hui OCRisée ni envoyée à un modèle IA - `document_capture_screen.dart`
+   ne déclenche aucun traitement IA (voir "Reste à faire" ci-dessus).
+4. **Prompt minimal (pas d'historique, pas de dump complet).** ✅ Fait côté
+   backend (vérifié) - `openai_provider.py` : le message utilisateur ne
+   contient QUE le transcript et/ou le texte OCR, jamais l'historique de
+   l'incident ni les faits déjà confirmés. Mobile : `AiApiClient`/`AiQueueProcessor`
+   n'envoient que `transcript`/`document_text` + `prompt_version`, jamais un
+   dossier complet (cohérent avec le payload minimal de `AiOperationQueue`,
+   point 14 de la demande R1/R2).
+5. **Sortie courte, structurée, limite de tokens.** ⚠️ Partiel. Le backend
+   utilise déjà le mode JSON (`response_format: json_object`) mais PAS le
+   mode "JSON Schema strict" d'OpenAI, et n'impose aucun `max_tokens`/limite
+   de sortie explicite. Pas commencé : plafond de tokens de sortie, passage
+   en mode schema strict.
+6. **Modèle le moins cher qui franchit le benchmark.** ⚠️ Partiel. `gpt-4o-mini`
+   (déjà un choix économique) est configuré par défaut, mais AUCUNE
+   comparaison multi-modèles n'existe dans `benchmark/run_scorer.py`
+   (`--provider` ne distingue que `mock`/`openai`, jamais entre plusieurs
+   modèles OpenAI) - le choix n'est donc pas encore justifié empiriquement
+   par le benchmark, seulement par défaut de configuration. Pas commencé :
+   harnais de comparaison multi-modèles.
+7. **Retry strictement limité (1 appel + 1 réparation, jamais de boucle
+   automatique, bascule vers saisie manuelle/UNKNOWN sur erreur
+   persistante).** ⚠️ Partiel, à deux niveaux différents. Backend (niveau
+   "un appel modèle") : ✅ déjà conforme EXACTEMENT - `openai_provider.py`
+   fait 1 appel, et EXACTEMENT 1 tentative de réparation si la sortie est
+   invalide, sans boucle (voir docstring du module). Mobile (niveau "file
+   d'attente dans le temps") : le disjoncteur de `AiQueueProcessor` a été
+   abaissé de 5 à 2 tentatives (`[0.3.5]`) pour se rapprocher de l'esprit de
+   cette exigence, mais la vraie bascule "saisie manuelle/UNKNOWN" n'existe
+   PAS encore - un item qui atteint le disjoncteur reste simplement `pending`
+   sans conséquence visible pour l'utilisateur, faute d'écran de revue
+   connecté à la file (voir "Reste à faire" ci-dessus). **Point ouvert** :
+   la valeur "2" est un choix par défaut prudent, pas une valeur confirmée
+   par l'équipe - à ajuster si vous avez une préférence précise.
+8. **Déduplication des jobs (`incident_id + operation_type + source_hash +
+   pipeline_version`).** ✅ Fait (`[0.3.5]`), composition EXACTE demandée -
+   `aiOperationIdempotencyKey`/`aiPipelineVersion` dans `ai_queue_processor.dart`,
+   `IncidentRepository.enqueueAiOperation` vérifie l'existence avant toute
+   insertion.
+9. **Journal de consommation obligatoire (tokens, coût, latence, retry,
+   modèle...).** ❌ Pas commencé, confirmé par lecture de code : aucune table
+   ni log ne persiste tokens/coût/retry/`installation_id`/version pipeline
+   côté backend - `latency_ms`/`model_id`/`request_id` existent seulement en
+   transit dans la réponse HTTP, jamais journalisés. Nécessite une nouvelle
+   table + instrumentation de `openai_provider.py` et des routes `/v1/ai/*`.
+10. **Métriques coût dans le benchmark (coût moyen/médian/p95, tokens,
+    cache, appels par dossier).** ❌ Pas commencé - `benchmark/scorer.py`/
+    `run_scorer.py` calculent des métriques de QUALITÉ (précision, rappel,
+    latence p95) mais aucun coût/tokens/taux de cache. Dépend du point 9
+    (rien à agréger sans journal de consommation).
+11. **Protection environnement TEST (clé séparée, quotas configurables).**
+    ❌ Pas commencé - une seule variable `RESERVEFLASH_OPENAI_API_KEY`,
+    aucune distinction DEV/TEST/PROD, aucun quota applicatif. Note : la
+    provision réelle d'un projet/clé OpenAI séparé pour TEST reste de toute
+    façon un geste utilisateur (aucune clé OpenAI n'est jamais manipulée
+    dans ce sandbox, contrainte permanente du projet) - ce qui PEUT être
+    fait ici est la plomberie de config (lecture de variables d'env
+    séparées, quotas applicatifs), pas la clé elle-même.
+12. **Circuit breaker budgétaire production.** ❌ Pas commencé - aucun
+    plafond de dépense, aucun refus temporaire de traitement IA au-delà
+    d'un seuil, nulle part dans `backend/app/`. Nécessite une nouvelle
+    fonctionnalité backend complète (config + service + tests).
+13. **Prompt caching (préfixe stable avant données variables).** ✅ Fait,
+    déjà conforme par construction - `openai_provider.py` charge le prompt
+    système (`prompts/extraction_fr_v1.txt`) tel quel comme préfixe fixe, le
+    contenu variable (transcript/OCR) n'arrive qu'ensuite dans le message
+    utilisateur. Le suivi de `cached_tokens` dans les métriques dépend du
+    point 9 (journal de consommation), pas encore fait.
+14. **Aucun traitement IA automatique au simple affichage (jamais dans
+    `build()`/`initState()`/navigation/polling).** ✅ Fait, vérifié - le seul
+    point d'enqueue mobile (`voice_description_screen.dart`) est déclenché
+    UNIQUEMENT par l'action explicite "arrêter l'enregistrement", jamais par
+    le cycle de vie du widget. Les routes backend `/v1/ai/*` sont de simples
+    endpoints HTTP, appelés uniquement par une action explicite du client -
+    aucun polling ni déclenchement automatique côté serveur.
+
+**Synthèse** : 4 points déjà conformes (2, 4, 13, 14), 5 partiellement
+conformes avec du travail réel restant (1, 5, 6, 7, 11 - la partie plomberie
+seulement pour 11), 4 pas commencés du tout (3, 9, 10, 12). Les points 9/10/12
+sont les plus lourds (nouvelle table + instrumentation backend + circuit
+breaker + extension benchmark) et devraient être traités comme un lot dédié,
+pas ajoutés en urgence à la volée. Les points 5/6 nécessitent des runs
+`--provider openai` réels avec une vraie clé (poste utilisateur, aucun accès
+réseau `api.openai.com` dans ce sandbox) pour être validés empiriquement, pas
+seulement codés.
 
 ### Recette terrain - PAS COMMENCÉE
 
@@ -173,14 +294,19 @@ n'est disponible dans cet environnement de développement.
 
 ## Prochaines étapes
 
-1. Mobile : OCR + entité `CandidateFactSet` + câblage `AiOperationQueue` +
-   écran de revue réel.
-2. Recette terrain avec clé OpenAI réelle sur appareil Android réel
+1. Mobile : OCR + écran de revue réel + bascule manuelle/UNKNOWN sur
+   disjoncteur de retry.
+2. Exigences coût/tokens IA (retour équipe, voir section dédiée) : journal
+   de consommation backend (point 9), métriques coût benchmark (point 10),
+   circuit breaker budgétaire (point 12) - à séquencer explicitement avec
+   l'équipe plutôt qu'improvisé, vu leur ampleur.
+3. Recette terrain avec clé OpenAI réelle sur appareil Android réel
    (protocole fourni par l'équipe, section "Test terrain obligatoire").
-3. Run `benchmark/run_scorer.py --provider openai` réel, rapport versionné.
-4. Livraison `r2-candidate` (ZIP, commit, tag, APK CI, SHA-256, ce document
+4. Run `benchmark/run_scorer.py --provider openai` réel (+ comparaison
+   multi-modèles, point 6 de la section coût/tokens), rapport versionné.
+5. Livraison `r2-candidate` (ZIP, commit, tag, APK CI, SHA-256, ce document
    mis à jour, `R2_BENCHMARK_REPORT.md`, captures, preuve du test terrain) -
    soumission à la recette indépendante. **Aucun verdict "GATE R2 PASS" ne
    sera déclaré par ce document ni par son auteur.**
-5. R3 : aucun développement avant validation du Gate R2 par la recette
+6. R3 : aucun développement avant validation du Gate R2 par la recette
    indépendante.

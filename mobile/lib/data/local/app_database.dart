@@ -240,12 +240,19 @@ class AiOperationQueue extends Table {
   TextColumn get id => text()();
   TextColumn get incidentId => text()();
   TextColumn get issueId => text().nullable()();
-  // 'transcribe_audio' | 'extract_from_photo' | 'extract_from_document' (BL).
+  // 'transcribe_audio' | 'extract_from_photo' | 'extract_from_document' (BL)
+  // | 'extract_from_transcript' (R2 - étape séparée de 'transcribe_audio'
+  // pour qu'un retry d'extraction ne refasse jamais une transcription déjà
+  // payée en tokens, voir lib/data/ai_queue_processor.dart).
   TextColumn get operationKind => text()();
   // Payload MINIMAL nécessaire à l'opération (point 14 - "éviter d'envoyer
   // systématiquement toutes les photos si non nécessaire") : référence(s)
   // vers LocalEvidenceAssets, jamais un dump complet du dossier.
   TextColumn get payloadJson => text()();
+  // Voir IncidentRepository.enqueueAiOperation : clé d'idempotence - une
+  // insertion avec une clé déjà présente ne crée PAS de doublon (retourne
+  // l'item existant), pour ne jamais déclencher deux appels IA payants pour
+  // le même contenu.
   TextColumn get idempotencyKey => text()();
   // 'pending' (créée, en attente de réseau ou de traitement) | 'in_progress'
   // | 'done' | 'failed' (voir retryCount avant abandon défini par l'UI).

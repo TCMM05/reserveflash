@@ -109,9 +109,15 @@ lib/
                               # posée avant R2) : relie ai_api_client.dart et
                               # IncidentRepository.saveCandidateFactSet, pour
                               # que la chaîne capture -> IA -> candidat
-                              # fonctionne de bout en bout. Disjoncteur de
-                              # retry uniforme (5 tentatives par défaut) -
-                              # jamais de boucle infinie, jamais de perte.
+                              # fonctionne de bout en bout. Optimisation coût
+                              # IA : transcription et extraction sont deux
+                              # opérations séparées et retentables
+                              # indépendamment (un échec d'extraction ne
+                              # refait jamais une transcription déjà payée) ;
+                              # enqueueAiOperation est idempotent par clé.
+                              # Disjoncteur de retry uniforme (5 tentatives
+                              # par défaut) - jamais de boucle infinie,
+                              # jamais de perte.
     local/
       app_database.dart              # schéma Drift - SOURCE DE VÉRITÉ V1
       local_incident_repository.dart # seule implémentation V1 de IncidentRepository

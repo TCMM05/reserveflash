@@ -186,6 +186,15 @@ abstract interface class IncidentRepository {
 
   // -- File d'opérations IA (offline-first, point 6) ----------------------
 
+  /// Met une opération IA en file. **Idempotent par [idempotencyKey]**
+  /// (retour d'équipe "exigences coût/tokens IA", point 8 - déduplication
+  /// des jobs) : si un item avec la MÊME clé existe déjà (quel que soit son
+  /// statut), il est retourné TEL QUEL plutôt qu'un doublon inséré - un
+  /// appelant qui met en file deux fois la même opération (double-tap,
+  /// retry applicatif...) ne déclenche jamais deux appels IA payants pour un
+  /// contenu identique. Voir `lib/data/ai_queue_processor.dart::aiOperationIdempotencyKey`
+  /// pour la composition de clé imposée (`incident_id + operation_type +
+  /// source_hash + pipeline_version`).
   Future<AiQueueItem> enqueueAiOperation({
     required String incidentId,
     required AiOperationKind operationKind,

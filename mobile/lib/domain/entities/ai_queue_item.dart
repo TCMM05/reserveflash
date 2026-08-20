@@ -4,7 +4,19 @@
 /// reconnexion."
 enum AiOperationStatus { pending, inProgress, done, failed }
 
-enum AiOperationKind { transcribeAudio, extractFromPhoto, extractFromDocument }
+enum AiOperationKind {
+  transcribeAudio,
+  extractFromPhoto,
+  extractFromDocument,
+
+  /// R2 (optimisation coût IA) - étape d'extraction séparée de
+  /// [transcribeAudio], mise en file par `lib/data/ai_queue_processor.dart`
+  /// une fois la transcription obtenue : si CETTE étape échoue (réseau,
+  /// quota...) et doit être retentée, la transcription déjà payée en tokens
+  /// n'est JAMAIS refaite - seule l'extraction (gratuite, le transcript est
+  /// déjà dans le payload de cet item) est retentée.
+  extractFromTranscript,
+}
 
 /// Une opération IA en file d'attente - miroir de la table
 /// `AiOperationQueue` (lib/data/local/app_database.dart), indépendant de
