@@ -31,9 +31,13 @@ import '../../data/local/app_database.dart';
 import '../../data/local/evidence_storage.dart';
 import '../../data/local/local_incident_repository.dart';
 import '../../data/remote/ai_api_client.dart';
+import '../../domain/entities/ai_queue_item.dart';
+import '../../domain/entities/candidate_fact_set.dart' as domain;
+import '../../domain/entities/confirmed_fact_set.dart' as domain;
 import '../../domain/entities/evidence_asset.dart' as domain;
 import '../../domain/entities/incident.dart' as domain;
 import '../../domain/entities/issue.dart' as domain;
+import '../../domain/entities/reserve_text.dart' as domain;
 import '../../domain/repositories/incident_repository.dart';
 import '../config/backend_config.dart';
 
@@ -159,4 +163,64 @@ final FutureProviderFamily<List<domain.EvidenceAsset>, String> incidentEvidenceP
   ref.watch(dataRefreshTickProvider);
   final IncidentRepository repo = ref.watch(incidentRepositoryProvider);
   return repo.verifyEvidenceAssetsIntegrity(incidentId);
+});
+
+// -- R2 : câblage écran de revue des faits (S11, facts_review_screen.dart) --
+
+/// Dernière extraction candidate reçue pour une anomalie (résultat du
+/// pipeline IA - `AiQueueProcessor`), ou `null` tant qu'aucune extraction
+/// n'a encore été effectuée/reçue pour cette anomalie (l'écran de revue
+/// affiche alors des champs entièrement à saisir manuellement - "bascule
+/// manuelle" naturelle, pas seulement après épuisement du disjoncteur de
+/// retry, voir docs/GATE_R2_STATUS.md).
+final FutureProviderFamily<domain.CandidateFactSet?, String> latestCandidateFactSetProvider =
+    FutureProvider.family<domain.CandidateFactSet?, String>((ref, issueId) async {
+  ref.watch(dataRefreshTickProvider);
+  final IncidentRepository repo = ref.watch(incidentRepositoryProvider);
+  return repo.latestCandidateFactSet(issueId);
+});
+
+/// Dernière révision de faits CONFIRMÉS pour une anomalie (post-revue
+/// utilisateur), ou `null` si l'anomalie n'a jamais encore été confirmée.
+final FutureProviderFamily<domain.ConfirmedFactSet?, String> latestConfirmedFactSetProvider =
+    FutureProvider.family<domain.ConfirmedFactSet?, String>((ref, issueId) async {
+  ref.watch(dataRefreshTickProvider);
+  final IncidentRepository repo = ref.watch(incidentRepositoryProvider);
+  return repo.latestConfirmedFactSet(issueId);
+});
+
+/// Dernière révision confirmée de CHAQUE anomalie de l'incident (une entrée
+/// par anomalie ayant au moins une confirmation) - utilisé par l'écran de
+/// revue pour savoir si `composeAndSaveReserve` a au moins un fait confirmé
+/// à composer (sinon `NoConfirmedFactsException`, voir
+/// `IncidentRepository.composeAndSaveReserve`).
+final FutureProviderFamily<List<domain.ConfirmedFactSet>, String>
+    incidentConfirmedFactSetsProvider =
+    FutureProvider.family<List<domain.ConfirmedFactSet>, String>((ref, incidentId) async {
+  ref.watch(dataRefreshTickProvider);
+  final IncidentRepository repo = ref.watch(incidentRepositoryProvider);
+  return repo.listLatestConfirmedFactSetsForIncident(incidentId);
+});
+
+/// Items `pending` de la file IA, tous incidents confondus (l'app ne traite
+/// qu'un incident à la fois côté UI - filtré côté écran par `issueId`/
+/// `incidentId`, voir `IncidentRepository.listPendingAiOperations`). Permet
+/// à l'écran de revue de distinguer "traitement IA encore en cours pour
+/// cette anomalie" de "bloqué par le disjoncteur de retry" (retour
+/// d'équipe, exigence coût IA point 7 - bascule manuelle/UNKNOWN).
+final FutureProvider<List<AiQueueItem>> pendingAiOperationsProvider =
+    FutureProvider<List<AiQueueItem>>((ref) async {
+  ref.watch(dataRefreshTickProvider);
+  final IncidentRepository repo = ref.watch(incidentRepositoryProvider);
+  return repo.listPendingAiOperations();
+});
+
+/// Dernière réserve composée pour l'incident (S12, `reserve_screen.dart`),
+/// ou `null` tant qu'`IncidentRepository.composeAndSaveReserve` n'a jamais
+/// été appelé avec succès pour ce dossier.
+final FutureProviderFamily<domain.ReserveText?, String> latestReserveTextProvider =
+    FutureProvider.family<domain.ReserveText?, String>((ref, incidentId) async {
+  ref.watch(dataRefreshTickProvider);
+  final IncidentRepository repo = ref.watch(incidentRepositoryProvider);
+  return repo.latestReserveText(incidentId);
 });

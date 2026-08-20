@@ -2,6 +2,70 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.6] - R2 - câblage réel écran de revue des faits + réserve (mobile) - 2026-08-20
+
+Cinquième lot mobile de R2. Jusqu'ici, `facts_review_screen.dart` (S11) et
+`reserve_screen.dart` (S12) étaient tous deux des stubs à contenu codé en
+dur, jamais branchés sur `IncidentRepository`, et `facts_review_screen.dart`
+n'était atteignable depuis AUCUN parcours réel (`pushFactsReview()` n'avait
+aucun appelant) - le principe R2 ("l'IA propose, le code contrôle,
+l'utilisateur confirme") n'était donc démontrable nulle part de bout en
+bout. Ce lot corrige les trois à la fois : câblage réel des deux écrans, et
+reachability depuis `checklist_screen.dart`.
+
+1. **`mobile/lib/features/facts_review/presentation/facts_review_screen.dart`**
+   - réécriture complète. Une section par anomalie (`Issue`) de l'incident ;
+   lit la dernière extraction candidate (`latestCandidateFactSet`) et la
+   dernière confirmation (`latestConfirmedFactSet`) via 4 nouveaux providers
+   Riverpod. Fonctionne intégralement SANS extraction IA préalable (champs
+   "non détecté", éditables/marquables UNKNOWN comme n'importe quel champ
+   candidat) - la vraie bascule "saisie manuelle/UNKNOWN" exigée par le
+   retour d'équipe (exigence coût IA, point 7), qui n'existait pas encore
+   (voir `[0.3.5]`, limitation documentée). "Valider les faits de cette
+   anomalie" appelle réellement `IncidentRepository.confirmFacts`. "Générer
+   la réserve" appelle `composeAndSaveReserve` puis navigue vers
+   `reserve_screen.dart`. Bandeau informatif si la file IA a un item encore
+   en cours ou bloqué par le disjoncteur pour cette anomalie, avec
+   rafraîchissement manuel (AppBar).
+2. **`mobile/lib/features/reserve/presentation/reserve_screen.dart`** -
+   affiche désormais `latestReserveText(incidentId)` réel (nouveau
+   provider), ou un message explicite si aucune réserve n'a encore été
+   composée - suppression du texte d'exemple codé en dur
+   (`_sampleReserveText`).
+3. **`mobile/lib/core/providers/app_providers.dart`** - 5 nouveaux
+   providers : `latestCandidateFactSetProvider`, `latestConfirmedFactSetProvider`,
+   `incidentConfirmedFactSetsProvider`, `pendingAiOperationsProvider`,
+   `latestReserveTextProvider`.
+4. **`mobile/lib/core/router/app_router.dart`** - `FactsReviewScreen`/
+   `ReserveScreen` reçoivent désormais `incidentId` via `extra` (même
+   mécanisme que les autres écrans du parcours de capture) ;
+   `pushFactsReview`/`pushReserve` prennent maintenant ce paramètre.
+5. **`mobile/lib/features/checklist/presentation/checklist_screen.dart`** -
+   nouvel item optionnel "Revue des faits (IA) et réserve" -> `pushFactsReview`.
+   Sans incidence sur `canFinish`/"Terminer le dossier" (critère de
+   complétude R1 inchangé) : la checklist R1 continue de fonctionner à
+   l'identique même si cette étape R2 n'est jamais utilisée.
+6. **Tests** - `mobile/test/features/facts_review_screen_test.dart` (3 tests :
+   affichage d'un candidat partiel + désactivation du bouton tant que non
+   résolu ; bascule manuelle complète sans aucun `CandidateFactSet`,
+   `confirmFacts` vérifié par relecture directe du repository ; acceptation
+   intégrale d'un candidat à 8 champs, valeurs persistées vérifiées une par
+   une) et `mobile/test/features/reserve_screen_test.dart` (2 tests :
+   absence de réserve -> message clair sans texte factice ; réserve réelle
+   composée -> texte affiché identique à celui retourné par
+   `composeAndSaveReserve`, jamais un texte codé en dur).
+
+**Limites documentées, pas des bugs** (détail complet dans
+`docs/GATE_R2_STATUS.md`) : tous les champs V1 prioritaires doivent être
+résolus pour valider une anomalie (pas de distinction champ critique par
+type d'anomalie) ; le type d'anomalie confirmé reste toujours celui choisi
+à l'étape S08, jamais substitué silencieusement même si l'IA suggère
+autre chose ; `CandidateField.confidence`/`.ambiguous` ne sont pas encore
+affichés ; le bouton "Générer la réserve" (navigation go_router) n'est pas
+couvert par un test automatisé dans ce sandbox, seul l'affichage réel de
+`ReserveScreen` l'est (même limite déjà actée pour l'audio dans
+`evidence_viewer_test.dart`).
+
 ## [0.3.5] - R2 - optimisation coût IA (mobile) + inventaire exigences équipe - 2026-08-20
 
 Quatrième lot mobile de R2, en réponse directe au retour d'équipe "Exigences

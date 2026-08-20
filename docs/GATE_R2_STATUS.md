@@ -159,6 +159,55 @@ corrigée.
     best-effort : aucune erreur de cette étape optionnelle n'est jamais
     affichée à l'utilisateur (la note vocale est déjà sauvegardée avec
     succès avant cette étape).
+  - `facts_review_screen.dart` (S11) - câblage réel (avant : stub à champs
+    codés en dur, jamais branché). Une section par anomalie de l'incident ;
+    lit `latestCandidateFactSet`/`latestConfirmedFactSet` via 4 nouveaux
+    providers Riverpod (`app_providers.dart`). Fonctionne intégralement
+    SANS extraction IA préalable (tous les champs démarrent "non détecté",
+    modifiables/marquables UNKNOWN comme n'importe quel champ candidat) :
+    c'est la vraie bascule "saisie manuelle/UNKNOWN" exigée par le retour
+    d'équipe (exigence coût IA, point 7 - voir section dédiée ci-dessous),
+    et elle fonctionne aussi bien "IA jamais lancée" qu'"IA bloquée par le
+    disjoncteur de retry", sans distinction nécessaire côté UI. "Valider les
+    faits de cette anomalie" appelle réellement `IncidentRepository.confirmFacts`
+    (persistance vérifiée par re-lecture directe du repository dans les
+    tests, pas seulement par l'affichage écran - voir
+    `test/features/facts_review_screen_test.dart`). "Générer la réserve"
+    appelle `composeAndSaveReserve` puis navigue vers `reserve_screen.dart`
+    (désormais activé également, pousse `incidentId` via `extra`
+    go_router). Affiche un bandeau informatif si un item de la file IA est
+    encore en cours ou bloqué par le disjoncteur pour cette anomalie
+    (`pendingAiOperationsProvider`), avec un bouton de rafraîchissement
+    manuel dans l'AppBar. Rendu désormais accessible depuis
+    `checklist_screen.dart` (item optionnel "Revue des faits (IA) et
+    réserve", SANS incidence sur `canFinish`/"Terminer le dossier" - critère
+    R1 inchangé).
+  - `reserve_screen.dart` (S12) - câblage réel (avant : texte d'exemple
+    codé en dur, `_sampleReserveText`). Affiche désormais
+    `latestReserveText(incidentId)` (nouveau provider) tel quel, ou un
+    message explicite si aucune réserve n'a encore été composée pour ce
+    dossier - jamais de texte factice. "Modifier les faits"/"Continuer"
+    inchangés (retour à l'écran précédent / vers `final_document_screen.dart`,
+    toujours un stub, hors périmètre - voir demande corrective R1).
+- **Limites documentées de ce câblage (V1, pas des bugs)** :
+  - TOUS les champs V1 prioritaires doivent être résolus pour valider une
+    anomalie - pas de distinction "champ critique pour CE type d'anomalie"
+    vs "champ secondaire" (même simplification que le disjoncteur de retry
+    uniforme de `ai_queue_processor.dart`).
+  - Le type d'anomalie confirmé reste TOUJOURS celui choisi à l'étape S08
+    (`IssueTypeScreen`) : si `issueTypeCandidate` de l'IA diverge, l'écran
+    l'affiche à titre informatif mais ne le substitue jamais silencieusement
+    (GATE zéro invention) - changer le type nécessite de revenir à S08.
+  - `CandidateField.confidence`/`.ambiguous` (reçus du backend) ne sont pas
+    encore affichés dans l'UI (seule la distinction "compris par l'IA" vs
+    "confirmé"/"corrigé"/"inconnu" l'est) - raffinement possible non
+    nécessaire pour ce premier câblage bout en bout.
+  - Le bouton "Générer la réserve" (navigation go_router vers
+    `reserve_screen.dart`) n'est PAS couvert par un test automatisé dans ce
+    sandbox (ce fichier n'installe pas de vrai `GoRouter` - hors scope de ce
+    câblage) ; `reserve_screen_test.dart` couvre séparément l'affichage réel
+    de `ReserveScreen` en l'atteignant directement, sans navigation - même
+    limite déjà documentée pour l'audio dans `evidence_viewer_test.dart`.
 - **Reste à faire** :
   - OCR on-device (ML Kit) sur la photo du BL, et mise en file
     `extractFromPhoto`/`extractFromDocument` depuis
@@ -166,16 +215,12 @@ corrigée.
     ce chemin - seule la note vocale est câblée).
   - Déclenchement de la file au retour réseau (listener de connectivité) -
     à ce stade, `AiQueueProcessor.processPendingOperations` n'est appelé
-    que juste après une capture, jamais sur un simple retour en ligne.
-  - Écran de revue réel (`facts_review_screen.dart` est aujourd'hui un stub
-    à champs codés en dur, non connecté au pipeline) - consommateur de
-    `latestCandidateFactSet`.
-  - Écran/action pour réarmer manuellement un item bloqué par le
-    disjoncteur de retry de `AiQueueProcessor` (au-delà de 2 tentatives) -
-    la vraie bascule "saisie manuelle/UNKNOWN" exigée par l'équipe (voir
-    section suivante, point 7) nécessite ce câblage, pas encore fait.
+    que juste après une capture ou manuellement depuis `facts_review_screen.dart`,
+    jamais automatiquement sur un simple retour en ligne.
   - `document_metadata_screen.dart` (S07, métadonnées BL - voir décision 4
     ci-dessus).
+  - `final_document_screen.dart` (S13, photo du document complété) - reste
+    un `RfScreenStub`, explicitement hors périmètre R1 (F13/F14).
 
 ## Exigences coût/tokens IA (retour équipe, 2026-08-20)
 
@@ -222,18 +267,25 @@ dans le code cité, jamais "je pense que c'est fait".
    harnais de comparaison multi-modèles.
 7. **Retry strictement limité (1 appel + 1 réparation, jamais de boucle
    automatique, bascule vers saisie manuelle/UNKNOWN sur erreur
-   persistante).** ⚠️ Partiel, à deux niveaux différents. Backend (niveau
-   "un appel modèle") : ✅ déjà conforme EXACTEMENT - `openai_provider.py`
-   fait 1 appel, et EXACTEMENT 1 tentative de réparation si la sortie est
-   invalide, sans boucle (voir docstring du module). Mobile (niveau "file
-   d'attente dans le temps") : le disjoncteur de `AiQueueProcessor` a été
-   abaissé de 5 à 2 tentatives (`[0.3.5]`) pour se rapprocher de l'esprit de
-   cette exigence, mais la vraie bascule "saisie manuelle/UNKNOWN" n'existe
-   PAS encore - un item qui atteint le disjoncteur reste simplement `pending`
-   sans conséquence visible pour l'utilisateur, faute d'écran de revue
-   connecté à la file (voir "Reste à faire" ci-dessus). **Point ouvert** :
-   la valeur "2" est un choix par défaut prudent, pas une valeur confirmée
-   par l'équipe - à ajuster si vous avez une préférence précise.
+   persistante).** ✅ Fait, aux deux niveaux. Backend (niveau "un appel
+   modèle") : `openai_provider.py` fait 1 appel, et EXACTEMENT 1 tentative
+   de réparation si la sortie est invalide, sans boucle (voir docstring du
+   module) - conforme depuis avant ce retour d'équipe. Mobile (niveau "file
+   d'attente dans le temps") : le disjoncteur de `AiQueueProcessor` est à 2
+   tentatives (`[0.3.5]`), ET `facts_review_screen.dart` (`[0.3.6]`) offre
+   désormais réellement la bascule "saisie manuelle/UNKNOWN" - chaque champ
+   V1 prioritaire est éditable/marquable UNKNOWN indépendamment de l'état de
+   la file IA (jamais bloquant), que l'IA n'ait jamais tourné, soit encore
+   en cours, ou ait atteint le disjoncteur. Persistance de cette bascule
+   vérifiée par test (`test/features/facts_review_screen_test.dart`, groupe
+   "bascule manuelle/UNKNOWN"), pas seulement par relecture de code. **Point
+   ouvert inchangé** : la valeur "2" reste un choix par défaut prudent, pas
+   une valeur confirmée par l'équipe - à ajuster si vous avez une préférence
+   précise. **Nuance non couverte** : l'écran ne distingue pas visuellement
+   "IA jamais tentée" de "disjoncteur épuisé après 2 échecs" (les deux
+   affichent le même formulaire manuel fonctionnel) - un bandeau informatif
+   distinct existe uniquement pour "en cours"/"bloqué après échecs" via
+   `pendingAiOperationsProvider`, pas pour "jamais lancé".
 8. **Déduplication des jobs (`incident_id + operation_type + source_hash +
    pipeline_version`).** ✅ Fait (`[0.3.5]`), composition EXACTE demandée -
    `aiOperationIdempotencyKey`/`aiPipelineVersion` dans `ai_queue_processor.dart`,
@@ -276,8 +328,8 @@ dans le code cité, jamais "je pense que c'est fait".
     endpoints HTTP, appelés uniquement par une action explicite du client -
     aucun polling ni déclenchement automatique côté serveur.
 
-**Synthèse** : 4 points déjà conformes (2, 4, 13, 14), 5 partiellement
-conformes avec du travail réel restant (1, 5, 6, 7, 11 - la partie plomberie
+**Synthèse** : 5 points déjà conformes (2, 4, 7, 13, 14), 4 partiellement
+conformes avec du travail réel restant (1, 5, 6, 11 - la partie plomberie
 seulement pour 11), 4 pas commencés du tout (3, 9, 10, 12). Les points 9/10/12
 sont les plus lourds (nouvelle table + instrumentation backend + circuit
 breaker + extension benchmark) et devraient être traités comme un lot dédié,
@@ -294,8 +346,10 @@ n'est disponible dans cet environnement de développement.
 
 ## Prochaines étapes
 
-1. Mobile : OCR + écran de revue réel + bascule manuelle/UNKNOWN sur
-   disjoncteur de retry.
+1. Mobile : OCR (ML Kit) + déclenchement de la file au retour réseau +
+   `document_metadata_screen.dart` (S07). Écran de revue réel et bascule
+   manuelle/UNKNOWN sur disjoncteur de retry : FAIT (`[0.3.6]`, voir section
+   "Avancement réel" ci-dessus).
 2. Exigences coût/tokens IA (retour équipe, voir section dédiée) : journal
    de consommation backend (point 9), métriques coût benchmark (point 10),
    circuit breaker budgétaire (point 12) - à séquencer explicitement avec

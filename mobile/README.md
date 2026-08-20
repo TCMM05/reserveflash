@@ -115,7 +115,7 @@ lib/
                               # indépendamment (un échec d'extraction ne
                               # refait jamais une transcription déjà payée) ;
                               # enqueueAiOperation est idempotent par clé.
-                              # Disjoncteur de retry uniforme (5 tentatives
+                              # Disjoncteur de retry uniforme (2 tentatives
                               # par défaut) - jamais de boucle infinie,
                               # jamais de perte.
     local/

@@ -74,6 +74,19 @@ class ChecklistScreen extends ConsumerWidget {
                       actionLabel: 'Modifier',
                       onAction: () => context.pushVoiceDescription(incidentId),
                     ),
+                    // R2 : revue des faits candidats IA / réserve générée -
+                    // optionnel et SANS incidence sur `canFinish` (R1 reste
+                    // le critère de complétude de capture inchangé, voir
+                    // docstring de fichier) : "Terminer le dossier" continue
+                    // de fonctionner exactement comme avant même si cette
+                    // étape n'est jamais utilisée.
+                    _ChecklistItem(
+                      ok: true,
+                      optional: true,
+                      label: 'Revue des faits (IA) et réserve (optionnel)',
+                      actionLabel: 'Revoir',
+                      onAction: () => context.pushFactsReview(incidentId),
+                    ),
                     const Spacer(),
                     if (!canFinish)
                       const Padding(

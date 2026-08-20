@@ -113,11 +113,15 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.factsReview,
-      builder: (BuildContext context, GoRouterState state) => const FactsReviewScreen(),
+      builder: (BuildContext context, GoRouterState state) => FactsReviewScreen(
+        incidentId: _extraIncidentId(state),
+      ),
     ),
     GoRoute(
       path: AppRoutes.reserve,
-      builder: (BuildContext context, GoRouterState state) => const ReserveScreen(),
+      builder: (BuildContext context, GoRouterState state) => ReserveScreen(
+        incidentId: _extraIncidentId(state),
+      ),
     ),
     GoRoute(
       path: AppRoutes.finalDocument,
@@ -196,8 +200,8 @@ extension AppNavigation on BuildContext {
       push(AppRoutes.evidenceCapture, extra: incidentId);
   void pushVoiceDescription(String incidentId) =>
       push(AppRoutes.voiceDescription, extra: incidentId);
-  void pushFactsReview() => push(AppRoutes.factsReview);
-  void pushReserve() => push(AppRoutes.reserve);
+  void pushFactsReview(String incidentId) => push(AppRoutes.factsReview, extra: incidentId);
+  void pushReserve(String incidentId) => push(AppRoutes.reserve, extra: incidentId);
   void pushFinalDocument() => push(AppRoutes.finalDocument);
   void pushChecklist(String incidentId) => push(AppRoutes.checklist, extra: incidentId);
   void pushDossierComplete(String incidentId) =>
