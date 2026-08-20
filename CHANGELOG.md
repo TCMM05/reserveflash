@@ -2,6 +2,62 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.9] - R2 - OCR on-device (ML Kit) sur le bon de livraison (mobile) - 2026-08-20
+
+Sixième lot mobile de R2. Jusqu'ici, `document_capture_screen.dart` (S06) ne
+déclenchait AUCUN traitement IA après la photo du bon de livraison - seule la
+note vocale (`voice_description_screen.dart`) était câblée à l'extraction IA.
+Ce lot corrige ce trou fonctionnel (le plus matériel restant après la
+validation terrain de `[0.3.8]`).
+
+1. **`mobile/lib/data/local/ocr_service.dart`** (nouveau) - interface
+   `OcrService` + implémentation `MlKitOcrService`
+   (`google_mlkit_text_recognition`, script Latin, entièrement sur
+   l'appareil, aucun appel réseau, aucun coût IA). Ne lève jamais pour un
+   texte absent/illisible (retourne une chaîne vide, même philosophie "ne
+   jamais bloquer l'utilisateur" que le reste du pipeline IA).
+2. **`mobile/lib/data/ai_queue_processor.dart`** - `AiOperationKind.extractFromDocument`
+   passe de "non supporté" à câblé (`_runExtractFromDocument`). Choix
+   architectural explicite : contrairement à `transcribeAudio`/
+   `extractFromTranscript` (séparés car la transcription audio est PAYANTE
+   et ne doit jamais être refaite après un échec d'extraction), l'OCR ML Kit
+   est gratuit - `extractFromDocument` reste donc un item UNIQUE : l'OCR est
+   relancé à chaque tentative, seul l'appel réseau d'extraction (payant) a
+   besoin d'un retry indépendant, et il l'a déjà via le retry normal de cet
+   item. Nouveau `ExtractFromDocumentPayload` (référence vers l'`EvidenceAsset`
+   photo, jamais le texte OCR lui-même - payload minimal, point 14).
+   `ocrService` : paramètre optionnel du constructeur (repli
+   `_UnconfiguredOcrService` qui lève si jamais utilisé sans être fourni) -
+   choix délibéré pour ne casser aucun appelant existant (tous les tests déjà
+   écrits construisaient `AiQueueProcessor` sans lui).
+3. **`mobile/lib/features/document_capture/presentation/document_capture_screen.dart`** -
+   après l'écriture de la photo sur disque (déjà point 4 - AVANT toute
+   opération réseau/IA), met en file `extractFromDocument` (rattaché à la
+   première anomalie de l'incident, même limitation V1 incident-scope que la
+   note vocale) et déclenche le traitement au mieux-effort - même politique
+   "jamais d'erreur affichée pour cette étape optionnelle" que
+   `voice_description_screen.dart`.
+4. **`mobile/lib/core/providers/app_providers.dart`** - nouveau
+   `ocrServiceProvider` (construit `MlKitOcrService`), injecté dans
+   `aiQueueProcessorProvider`.
+5. **Backend : AUCUN changement.** `/v1/ai/extract` acceptait déjà
+   `document_text` depuis l'origine de R2 (même endpoint, même schéma
+   `CandidateFactData` que pour un transcript audio - seule la source du
+   texte diffère) : ce lot est purement mobile.
+6. **`mobile/pubspec.yaml`** - nouvelle dépendance
+   `google_mlkit_text_recognition: ^0.17.1` (version vérifiée sur pub.dev au
+   moment de ce lot ; exige `minSdkVersion: 21` côté Android, déjà largement
+   couvert par la cible Android 10+ de ce projet - aucun conflit attendu).
+7. **`mobile/test/data/ai_queue_processor_test.dart`** - 2 nouveaux tests
+   (`OcrService` factice, même philosophie que `_FakeAiHttpTransport`) :
+   succès OCR+extraction en un seul item, et échec OCR propre (requeue
+   pending, jamais de perte).
+
+Non testé en conditions réelles à ce stade (contrairement à la note vocale,
+validée terrain en `[0.3.8]`) - à faire au prochain test terrain, priorité
+haute vu que c'est un chemin de code entièrement neuf (plugin natif ML Kit
+jamais exercé jusqu'ici dans ce projet).
+
 ## [0.3.8] - R2 - première validation terrain réelle bout en bout (émulateur Android) - 2026-08-20
 
 Première exécution réelle de la chaîne complète R2 sur un appareil (émulateur

@@ -50,6 +50,11 @@
 /// plusieurs "rounds" au sein d'un même appel (voir sa docstring) pour que
 /// la chaîne complète progresse en un seul appel côté appelant (écran),
 /// plutôt que d'exiger un deuxième appel explicite pour l'étape suivante.
+///
+/// OCR document (R2, lot `document_capture_screen.dart`) : `_runExtractFromDocument`
+/// ne suit PAS ce découpage en deux étapes - voir la docstring
+/// d'[ExtractFromDocumentPayload] pour la raison (OCR on-device gratuit,
+/// contrairement à la transcription audio payante).
 library;
 
 import 'dart:convert';
@@ -62,6 +67,7 @@ import '../domain/entities/candidate_fact_set.dart';
 import '../domain/entities/evidence_asset.dart';
 import '../domain/repositories/incident_repository.dart';
 import 'local/evidence_storage.dart';
+import 'local/ocr_service.dart';
 import 'remote/ai_api_client.dart';
 
 /// Voir docstring de fichier : disjoncteur de retry, appliqué uniformément.
@@ -154,6 +160,32 @@ final class ExtractFromTranscriptPayload {
   String encode() => jsonEncode(toJson());
 }
 
+/// Contrat du payload JSON pour `AiOperationKind.extractFromDocument` (R2,
+/// lot OCR `document_capture_screen.dart`) - contient UNE référence vers
+/// l'[EvidenceAsset] photo (bon de livraison) déjà capturé et persisté sur
+/// le disque de l'appareil (point 14 - payload minimal), jamais le texte OCR
+/// lui-même : contrairement à l'audio (transcription payante, séparée de
+/// l'extraction pour ne jamais la refaire inutilement - voir docstring de
+/// fichier), l'OCR tourne ENTIÈREMENT sur l'appareil (ML Kit, aucun coût IA,
+/// aucun appel réseau) - il est donc relancé à chaque tentative de CET item
+/// sans qu'il soit nécessaire de le séparer en une étape distincte comme
+/// `transcribeAudio`/`extractFromTranscript` : seul l'appel réseau
+/// d'extraction (`/v1/ai/extract`, payant) a besoin d'être retentable
+/// indépendamment, et il l'est déjà (retry de CET item unique).
+final class ExtractFromDocumentPayload {
+  const ExtractFromDocumentPayload({required this.evidenceAssetId});
+
+  factory ExtractFromDocumentPayload.fromJson(Map<String, dynamic> json) {
+    return ExtractFromDocumentPayload(evidenceAssetId: json['evidence_asset_id'] as String);
+  }
+
+  final String evidenceAssetId;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{'evidence_asset_id': evidenceAssetId};
+
+  String encode() => jsonEncode(toJson());
+}
+
 enum AiQueueProcessingOutcome { succeeded, failed, skipped }
 
 /// Nombre maximal de "rounds" par appel à
@@ -181,6 +213,27 @@ final class AiQueueProcessingSummary {
   int get total => succeeded + failed + skipped;
 }
 
+/// Repli utilisé quand aucun [OcrService] n'est fourni explicitement au
+/// constructeur d'[AiQueueProcessor] - `ocrService` est optionnel (plutôt
+/// que `required`) précisément pour ça : ne pas casser tous les appelants
+/// existants (production ET tests) qui construisaient `AiQueueProcessor`
+/// avant l'ajout du lot OCR (R2) et n'exercent jamais
+/// `extractFromDocument`. Lève une erreur explicite si jamais utilisée pour
+/// de vrai, plutôt qu'un silence trompeur - `lib/core/providers/app_providers.dart`
+/// fournit toujours le vrai [MlKitOcrService] en production.
+final class _UnconfiguredOcrService implements OcrService {
+  const _UnconfiguredOcrService();
+
+  @override
+  Future<String> recognizeText(String imagePath) {
+    throw StateError(
+      'AiQueueProcessor construit sans OcrService explicite, mais '
+      'extractFromDocument a été appelé - fournir ocrService: au '
+      'constructeur (voir lib/core/providers/app_providers.dart).',
+    );
+  }
+}
+
 /// Traite les items `pending` de la file `AiOperationQueue` - un item à la
 /// fois, séquentiellement (pas de parallélisme : simplicité V1, aucune
 /// exigence de débit connue à ce stade).
@@ -194,16 +247,19 @@ final class AiQueueProcessor {
     required IncidentRepository incidentRepository,
     required AiApiClient aiApiClient,
     required EvidenceStorageService evidenceStorage,
+    OcrService ocrService = const _UnconfiguredOcrService(),
     this.maxRetryCount = defaultAiQueueMaxRetryCount,
     this.maxRoundsPerCall = defaultAiQueueMaxRoundsPerCall,
     this.extractionPromptVersion = defaultExtractionPromptVersion,
   })  : _incidentRepository = incidentRepository,
         _aiApiClient = aiApiClient,
-        _evidenceStorage = evidenceStorage;
+        _evidenceStorage = evidenceStorage,
+        _ocrService = ocrService;
 
   final IncidentRepository _incidentRepository;
   final AiApiClient _aiApiClient;
   final EvidenceStorageService _evidenceStorage;
+  final OcrService _ocrService;
   final int maxRetryCount;
   final int maxRoundsPerCall;
   final String extractionPromptVersion;
@@ -258,10 +314,11 @@ final class AiQueueProcessor {
       return AiQueueProcessingOutcome.skipped;
     }
     if (!_isSupported(item.operationKind)) {
-      // extractFromPhoto/extractFromDocument : l'OCR on-device n'est pas
-      // encore câblé (voir docs/GATE_R2_STATUS.md, "Reste à faire") -
-      // laissé `pending` intact plutôt que de consommer un essai pour un
-      // échec certain.
+      // extractFromPhoto (preuve photo générique) : l'OCR on-device n'est
+      // câblé QUE pour extractFromDocument (bon de livraison,
+      // document_capture_screen.dart) à ce stade - voir
+      // docs/GATE_R2_STATUS.md, "Reste à faire". Laissé `pending` intact
+      // plutôt que de consommer un essai pour un échec certain.
       return AiQueueProcessingOutcome.skipped;
     }
 
@@ -285,9 +342,9 @@ final class AiQueueProcessor {
     switch (kind) {
       case AiOperationKind.transcribeAudio:
       case AiOperationKind.extractFromTranscript:
+      case AiOperationKind.extractFromDocument:
         return true;
       case AiOperationKind.extractFromPhoto:
-      case AiOperationKind.extractFromDocument:
         return false;
     }
   }
@@ -298,15 +355,17 @@ final class AiQueueProcessor {
         return _runTranscribeAudio(item);
       case AiOperationKind.extractFromTranscript:
         return _runExtractFromTranscript(item);
-      case AiOperationKind.extractFromPhoto:
       case AiOperationKind.extractFromDocument:
-        // Ne devrait jamais être atteint : `_isSupported` filtre déjà ces
-        // deux cas avant tout appel à `_run` (voir `_processOne`). Garde
-        // défensive explicite plutôt qu'un comportement silencieux si cet
-        // invariant est un jour cassé par erreur.
+        return _runExtractFromDocument(item);
+      case AiOperationKind.extractFromPhoto:
+        // Ne devrait jamais être atteint : `_isSupported` filtre déjà ce cas
+        // avant tout appel à `_run` (voir `_processOne`). Garde défensive
+        // explicite plutôt qu'un comportement silencieux si cet invariant
+        // est un jour cassé par erreur.
         throw StateError(
           '${item.operationKind} pas encore supporté par AiQueueProcessor '
-          '(OCR on-device non câblé - voir docs/GATE_R2_STATUS.md).',
+          '(OCR sur preuve photo générique non câblé - voir '
+          'docs/GATE_R2_STATUS.md).',
         );
     }
   }
@@ -409,6 +468,59 @@ final class AiQueueProcessor {
     // `saveCandidateFactSet` réapplique `screenCandidateFactData` (défense
     // en profondeur, voir sa docstring) - ce processeur n'a pas à filtrer
     // lui-même le candidat reçu du backend.
+    final CandidateFactSet saved = await _incidentRepository.saveCandidateFactSet(
+      issueId: issueId,
+      data: extraction.candidate,
+      promptVersion: extraction.promptVersion,
+      model: extraction.modelId,
+    );
+
+    return jsonEncode(<String, dynamic>{'candidate_fact_set_id': saved.id});
+  }
+
+  /// R2 (lot OCR) : OCR on-device (ML Kit, gratuit, aucun réseau) PUIS
+  /// extraction en un seul item (voir docstring d'[ExtractFromDocumentPayload]
+  /// pour la justification de ne pas séparer ces deux étapes, contrairement
+  /// à `transcribeAudio`/`extractFromTranscript`). Un texte OCR vide (photo
+  /// illisible, angle trop mauvais, document non textuel) n'est jamais une
+  /// erreur ici : il est transmis tel quel à l'extraction, qui produira
+  /// simplement un `CandidateFactData` sans champ (`fields: {}`,
+  /// `requires_review: true`) - jamais un blocage de l'utilisateur pour ce
+  /// cas (section "Échec IA", même principe que partout ailleurs).
+  Future<String> _runExtractFromDocument(AiQueueItem item) async {
+    final String? issueId = item.issueId;
+    if (issueId == null) {
+      // Même invariant que _runTranscribeAudio ci-dessus : un
+      // CandidateFactSet est toujours rattaché à une anomalie.
+      throw StateError(
+        'AiQueueItem ${item.id} (extractFromDocument) sans issueId : '
+        'impossible de persister un CandidateFactSet (rattaché à une '
+        'anomalie, jamais à un incident entier).',
+      );
+    }
+
+    final ExtractFromDocumentPayload payload = ExtractFromDocumentPayload.fromJson(
+      jsonDecode(item.payloadJson) as Map<String, dynamic>,
+    );
+
+    final List<EvidenceAsset> assets =
+        await _incidentRepository.listEvidenceAssets(item.incidentId);
+    final EvidenceAsset asset = assets.firstWhere(
+      (EvidenceAsset a) => a.id == payload.evidenceAssetId,
+      orElse: () => throw StateError(
+        "Preuve ${payload.evidenceAssetId} introuvable pour l'opération "
+        '${item.id} (incident ${item.incidentId}).',
+      ),
+    );
+
+    final String documentText = await _ocrService.recognizeText(asset.localFilePath);
+
+    final AiExtractionResult extraction = await _aiApiClient.extractCandidateFacts(
+      documentText: documentText,
+      promptVersion: extractionPromptVersion,
+    );
+
+    // Même défense en profondeur que _runExtractFromTranscript ci-dessus.
     final CandidateFactSet saved = await _incidentRepository.saveCandidateFactSet(
       issueId: issueId,
       data: extraction.candidate,

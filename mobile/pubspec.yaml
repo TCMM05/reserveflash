@@ -82,6 +82,24 @@ dependencies:
   # aucune dépendance Internet introduite (R1-T09/T10).
   just_audio: ^0.10.6
 
+  # R2 (lot OCR `document_capture_screen.dart`, section 3.2 "S06") -
+  # reconnaissance de texte SUR L'APPAREIL (ML Kit), aucun appel réseau,
+  # aucun coût IA - contrairement à la transcription audio (voir
+  # lib/data/local/ocr_service.dart pour la justification complète et
+  # lib/data/ai_queue_processor.dart::_runExtractFromDocument pour son
+  # câblage). Version choisie après recherche (pub.dev/packages/
+  # google_mlkit_text_recognition, 2026-08) : ^0.17.1 est la dernière
+  # publiée au moment de ce lot. Exige `minSdkVersion: 21` côté Android
+  # (déjà largement couvert par la cible Android 10+/API 29 de ce projet,
+  # section 5.1 - aucun conflit attendu) et iOS 15.5+ (également déjà
+  # couvert par la cible iOS 16+). `google_mlkit_commons` (InputImage) est
+  # re-exporté directement par ce package - pas de dépendance séparée
+  # nécessaire ici. Second ajout de plugin natif après `record`/
+  # `just_audio` (voir leurs commentaires ci-dessus pour l'historique de ce
+  # type de risque) - à vérifier en priorité lors du prochain `flutter
+  # build apk --debug` réel (voir mobile/README.md).
+  google_mlkit_text_recognition: ^0.17.1
+
   # Icônes Material Symbols cohérentes (section 4.5).
   material_symbols_icons: ^4.2719.3
 

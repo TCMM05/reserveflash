@@ -40,8 +40,10 @@ corrigée.
    `app/infrastructure/ai/__init__.py` référençait déjà explicitement
    `openai_provider.py` comme prochaine étape).
 2. **OCR : Google ML Kit Text Recognition, on-device.** Conforme à "préférer
-   un OCR local/on-device lorsque cela est raisonnable" ; pas encore
-   implémenté (voir section "Reste à faire" ci-dessous).
+   un OCR local/on-device lorsque cela est raisonnable" ; câblé pour
+   `document_capture_screen.dart` (bon de livraison) depuis ce lot - voir
+   section "Avancement réel" ci-dessous. Reste non câblé pour une preuve
+   photo générique (`extractFromPhoto`, voir "Reste à faire").
 3. **Benchmark avancé de R6 à R2** (voir `benchmark/README.md`, section
    "Changement de séquencement" pour le détail complet). Le dépôt assignait
    jusqu'ici le corpus de qualification (240 cas visés) au jalon "R6 -
@@ -145,9 +147,15 @@ corrigée.
     appel côté écran. Disjoncteur de retry uniforme (2 tentatives par
     défaut, volontairement bas - voir section "Exigences coût/tokens IA"
     ci-dessous, point 7) - au-delà, un item reste `pending` en base sans
-    être retenté automatiquement, rien n'est supprimé. `extractFromPhoto`/
-    `extractFromDocument` (OCR non câblé) sont laissés intacts, jamais
-    consommés pour un échec certain. `IncidentRepository.enqueueAiOperation`
+    être retenté automatiquement, rien n'est supprimé. `extractFromPhoto`
+    (preuve photo générique, OCR non câblé) est laissé intact, jamais
+    consommé pour un échec certain. `extractFromDocument` (bon de livraison)
+    est câblé (voir ci-dessous) : contrairement à l'audio, l'OCR ML Kit
+    tourne SUR L'APPAREIL (gratuit, aucun réseau) directement dans
+    `_runExtractFromDocument`, sans étape intermédiaire mise en file - seul
+    l'appel réseau d'extraction (`/v1/ai/extract`, payant) a besoin d'être
+    retenté indépendamment, et il l'est déjà via le retry de cet item
+    unique. `IncidentRepository.enqueueAiOperation`
     est idempotent par clé `incident_id + operation_type + source_hash +
     pipeline_version` (une mise en file en double ne crée jamais un doublon
     qui déclencherait un appel IA payant superflu).
@@ -159,6 +167,23 @@ corrigée.
     best-effort : aucune erreur de cette étape optionnelle n'est jamais
     affichée à l'utilisateur (la note vocale est déjà sauvegardée avec
     succès avant cette étape).
+  - `document_capture_screen.dart` (S06) - deuxième point de déclenchement
+    câblé (avant ce lot : AUCUN, la photo du BL restait sans traitement IA
+    quel qu'il soit). Après l'enregistrement de la photo, met en file une
+    opération `extractFromDocument` (rattachée à la première anomalie de
+    l'incident - même limitation V1 incident-scope que la note vocale) puis
+    déclenche le traitement au mieux-effort - même politique "jamais
+    d'erreur affichée pour cette étape optionnelle" que
+    `voice_description_screen.dart`. `lib/data/local/ocr_service.dart`
+    (nouveau) : interface `OcrService` + implémentation `MlKitOcrService`
+    (`google_mlkit_text_recognition`, script Latin) - reconnaissance de
+    texte SUR L'APPAREIL, aucun appel réseau, aucun coût IA. Le texte
+    reconnu est transmis à `/v1/ai/extract` via le champ `document_text`
+    (déjà supporté côté backend et par `AiApiClient.extractCandidateFacts`
+    depuis l'origine de R2 - aucun changement backend nécessaire pour ce
+    lot). Preuve par test :
+    `test/data/ai_queue_processor_test.dart` (2 nouveaux tests - succès
+    avec un `OcrService` factice, et échec OCR proprement requeue).
   - `facts_review_screen.dart` (S11) - câblage réel (avant : stub à champs
     codés en dur, jamais branché). Une section par anomalie de l'incident ;
     lit `latestCandidateFactSet`/`latestConfirmedFactSet` via 4 nouveaux
@@ -209,10 +234,9 @@ corrigée.
     de `ReserveScreen` en l'atteignant directement, sans navigation - même
     limite déjà documentée pour l'audio dans `evidence_viewer_test.dart`.
 - **Reste à faire** :
-  - OCR on-device (ML Kit) sur la photo du BL, et mise en file
-    `extractFromPhoto`/`extractFromDocument` depuis
-    `document_capture_screen.dart` (aujourd'hui aucun déclenchement IA sur
-    ce chemin - seule la note vocale est câblée).
+  - OCR on-device (ML Kit) sur une preuve **photo générique** (pas le BL,
+    déjà fait ci-dessus) - `extractFromPhoto` reste non câblé (`_isSupported`
+    retourne `false`), volontairement hors périmètre de ce lot.
   - Déclenchement de la file au retour réseau (listener de connectivité) -
     à ce stade, `AiQueueProcessor.processPendingOperations` n'est appelé
     que juste après une capture ou manuellement depuis `facts_review_screen.dart`,
@@ -243,9 +267,11 @@ dans le code cité, jamais "je pense que c'est fait".
    deux opérations distinctes et retentables indépendamment. Backend :
    `/v1/ai/transcribe` et `/v1/ai/extract` étaient déjà deux routes
    séparées depuis l'origine.
-3. **OCR local prioritaire (ML Kit).** ❌ Pas commencé. Aucune photo de BL
-   n'est aujourd'hui OCRisée ni envoyée à un modèle IA - `document_capture_screen.dart`
-   ne déclenche aucun traitement IA (voir "Reste à faire" ci-dessus).
+3. **OCR local prioritaire (ML Kit).** ✅ Fait pour le BL (ce lot) -
+   `document_capture_screen.dart` met désormais en file une extraction OCR
+   (`lib/data/local/ocr_service.dart`, ML Kit on-device, aucun coût IA) après
+   chaque photo de bon de livraison. ⚠️ Partiel : une preuve photo générique
+   (`extractFromPhoto`) n'est toujours pas OCRisée (voir "Reste à faire").
 4. **Prompt minimal (pas d'historique, pas de dump complet).** ✅ Fait côté
    backend (vérifié) - `openai_provider.py` : le message utilisateur ne
    contient QUE le transcript et/ou le texte OCR, jamais l'historique de
@@ -328,9 +354,10 @@ dans le code cité, jamais "je pense que c'est fait".
     endpoints HTTP, appelés uniquement par une action explicite du client -
     aucun polling ni déclenchement automatique côté serveur.
 
-**Synthèse** : 5 points déjà conformes (2, 4, 7, 13, 14), 4 partiellement
+**Synthèse** : 6 points déjà conformes (2, 4, 7, 13, 14, et désormais 3 pour
+le BL - reste partiel pour une preuve photo générique), 4 partiellement
 conformes avec du travail réel restant (1, 5, 6, 11 - la partie plomberie
-seulement pour 11), 4 pas commencés du tout (3, 9, 10, 12). Les points 9/10/12
+seulement pour 11), 3 pas commencés du tout (9, 10, 12). Les points 9/10/12
 sont les plus lourds (nouvelle table + instrumentation backend + circuit
 breaker + extension benchmark) et devraient être traités comme un lot dédié,
 pas ajoutés en urgence à la volée. Les points 5/6 nécessitent des runs
@@ -357,9 +384,12 @@ uniquement en bandeau informationnel.
 Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 - Test sur un **appareil Android physique réel** (celui-ci était un
   émulateur) - networking/latence/micro réels peuvent différer.
-- OCR (ML Kit), déclenchement automatique de la file au retour réseau,
-  exigences coût/tokens IA (points 9/10/12) : toujours pas commencés (voir
-  section "Avancement réel" ci-dessus).
+- OCR sur le BL câblé depuis (voir "Avancement réel" ci-dessus, ajouté après
+  cette validation terrain) - non testé en conditions réelles pour autant
+  (voir CHANGELOG, à faire en priorité au prochain test terrain). OCR sur
+  preuve photo générique, déclenchement automatique de la file au retour
+  réseau, exigences coût/tokens IA (points 9/10/12) : toujours pas commencés
+  (voir section "Avancement réel" ci-dessus).
 - **La recette indépendante elle-même** : cette session de test a été menée
   par l'utilisateur avec l'assistant en accompagnement, ce n'est PAS la
   recette indépendante prévue par le processus GATE. Aucun verdict "GATE R2
@@ -367,10 +397,13 @@ Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 
 ## Prochaines étapes
 
-1. Mobile : OCR (ML Kit) + déclenchement de la file au retour réseau +
+1. Mobile : déclenchement de la file au retour réseau +
    `document_metadata_screen.dart` (S07). Écran de revue réel et bascule
    manuelle/UNKNOWN sur disjoncteur de retry : FAIT (`[0.3.6]`, voir section
-   "Avancement réel" ci-dessus).
+   "Avancement réel" ci-dessus). OCR (ML Kit) sur le BL : FAIT (ce lot, voir
+   section "Avancement réel" ci-dessus) - reste OCR sur preuve photo
+   générique (`extractFromPhoto`) et un test terrain réel de ce nouveau
+   chemin (non testé en conditions réelles à ce stade).
 2. Exigences coût/tokens IA (retour équipe, voir section dédiée) : journal
    de consommation backend (point 9), métriques coût benchmark (point 10),
    circuit breaker budgétaire (point 12) - à séquencer explicitement avec

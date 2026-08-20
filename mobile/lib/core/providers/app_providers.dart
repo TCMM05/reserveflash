@@ -30,6 +30,7 @@ import '../../data/ai_queue_processor.dart';
 import '../../data/local/app_database.dart';
 import '../../data/local/evidence_storage.dart';
 import '../../data/local/local_incident_repository.dart';
+import '../../data/local/ocr_service.dart';
 import '../../data/remote/ai_api_client.dart';
 import '../../domain/entities/ai_queue_item.dart';
 import '../../domain/entities/candidate_fact_set.dart' as domain;
@@ -73,6 +74,12 @@ final Provider<AppDatabase> appDatabaseProvider = Provider<AppDatabase>((ref) {
 
 final Provider<EvidenceStorageService> evidenceStorageServiceProvider =
     Provider<EvidenceStorageService>((ref) => const EvidenceStorageService());
+
+/// R2 (lot OCR `document_capture_screen.dart`) - voir
+/// `lib/data/local/ocr_service.dart` : OCR on-device (ML Kit), aucun appel
+/// réseau, aucun coût IA.
+final Provider<OcrService> ocrServiceProvider =
+    Provider<OcrService>((ref) => const MlKitOcrService());
 
 /// R2 - unique client HTTP de l'app (voir
 /// `lib/data/remote/ai_api_client.dart` : seul appel réseau optionnel,
@@ -118,6 +125,7 @@ final Provider<AiQueueProcessor> aiQueueProcessorProvider =
     incidentRepository: ref.watch(incidentRepositoryProvider),
     aiApiClient: ref.watch(aiApiClientProvider),
     evidenceStorage: ref.watch(evidenceStorageServiceProvider),
+    ocrService: ref.watch(ocrServiceProvider),
   );
 });
 

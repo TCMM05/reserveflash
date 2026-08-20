@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,7 +7,10 @@ import 'package:reserveflash/core/design_system/rf_spacing.dart';
 import 'package:reserveflash/core/design_system/rf_typography.dart';
 import 'package:reserveflash/core/providers/app_providers.dart';
 import 'package:reserveflash/core/router/app_router.dart';
+import 'package:reserveflash/data/ai_queue_processor.dart';
+import 'package:reserveflash/domain/entities/ai_queue_item.dart';
 import 'package:reserveflash/domain/entities/evidence_asset.dart' as domain;
+import 'package:reserveflash/domain/entities/issue.dart' as domain;
 import 'package:reserveflash/features/common/presentation/camera_capture_page.dart';
 import 'package:reserveflash/features/common/presentation/evidence_photo_viewer_screen.dart';
 import 'package:reserveflash/features/common/presentation/evidence_thumbnail_tile.dart';
@@ -16,7 +21,12 @@ import 'package:reserveflash/features/common/presentation/missing_incident_view.
 /// `EvidenceAsset` complète (id, incident associé, type document de
 /// livraison, date/heure, chemin local, taille, SHA-256) est écrite AVANT
 /// toute opération réseau/IA (points 4/8/9) - aucun OCR/IA obligatoire ici
-/// (point 2). Fonctionne 100% hors ligne (R1-T10).
+/// (point 2, capture 100% hors ligne, R1-T10). R2 (lot OCR) : une fois la
+/// photo écrite sur disque, une extraction OCR+IA est mise en file au
+/// mieux-effort (voir `_enqueueOcrExtractionBestEffort` ci-dessous) - même
+/// philosophie que `voice_description_screen.dart` : l'échec de cette
+/// étape optionnelle ne doit jamais donner l'impression que la photo
+/// elle-même a été perdue, ni bloquer la suite du parcours.
 class DocumentCaptureScreen extends ConsumerStatefulWidget {
   const DocumentCaptureScreen({required this.incidentId, super.key});
 
@@ -58,6 +68,7 @@ class _DocumentCaptureScreenState extends ConsumerState<DocumentCaptureScreen> {
       // ne fait, lui non plus, aucun appel réseau.
       await ref.read(incidentRepositoryProvider).registerEvidenceAsset(asset);
       notifyDataChanged(ref);
+      await _enqueueOcrExtractionBestEffort(asset);
     } catch (e) {
       if (mounted) {
         setState(() => _errorMessage = "Impossible d'enregistrer la photo : $e");
@@ -66,6 +77,51 @@ class _DocumentCaptureScreenState extends ConsumerState<DocumentCaptureScreen> {
       if (mounted) {
         setState(() => _isProcessing = false);
       }
+    }
+  }
+
+  /// R2 (lot OCR) : déclenche l'extraction OCR+IA du document qui vient
+  /// d'être capturé, au mieux-effort - jamais un blocage de l'utilisateur,
+  /// jamais une erreur affichée ici (voir docstring de fichier). Même
+  /// limitation V1 documentée que `voice_description_screen.dart` :
+  /// rattache l'opération à la première anomalie (`Issue`) de l'incident (un
+  /// `CandidateFactSet` est toujours rattaché à une anomalie, jamais à
+  /// l'incident entier) - si aucune anomalie n'existe encore (S06 atteint
+  /// hors du parcours nominal, qui passe normalement par S08 après S06),
+  /// aucune opération n'est mise en file : rien n'est perdu (la photo reste
+  /// consultable), juste aucune extraction IA automatique.
+  Future<void> _enqueueOcrExtractionBestEffort(domain.EvidenceAsset asset) async {
+    try {
+      final List<domain.Issue> issues =
+          await ref.read(incidentRepositoryProvider).listIssues(widget.incidentId);
+      if (issues.isEmpty) {
+        return;
+      }
+      final ExtractFromDocumentPayload payload =
+          ExtractFromDocumentPayload(evidenceAssetId: asset.id);
+      // sourceHash = SHA-256 déjà calculé à la capture (evidence_storage.dart)
+      // - même principe que la note vocale (voir
+      // voice_description_screen.dart::_enqueueTranscriptionBestEffort).
+      final String sourceHash = asset.sha256 ?? asset.id;
+      await ref.read(incidentRepositoryProvider).enqueueAiOperation(
+            incidentId: widget.incidentId,
+            issueId: issues.first.id,
+            operationKind: AiOperationKind.extractFromDocument,
+            payloadJson: payload.encode(),
+            idempotencyKey: aiOperationIdempotencyKey(
+              incidentId: widget.incidentId,
+              operationKind: AiOperationKind.extractFromDocument,
+              sourceHash: sourceHash,
+            ),
+          );
+      // Déclenchement "online" au mieux-effort - si l'OCR/extraction échoue
+      // maintenant (réseau, quota IA...), l'item reste `pending` en base et
+      // sera retenté par un prochain appel à ce même processeur (ex : écran
+      // de revue des faits) - jamais une perte.
+      unawaited(ref.read(aiQueueProcessorProvider).processPendingOperations());
+    } catch (_) {
+      // Best-effort explicite (voir docstring de fichier) : aucune erreur
+      // affichée à l'utilisateur pour cette étape optionnelle.
     }
   }
 

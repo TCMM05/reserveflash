@@ -141,6 +141,10 @@ lib/
                               # octets pour les preuves (photos/audio/BL) -
                               # inclut readBytes() (R2) pour transmettre un
                               # audio déjà capturé à AiApiClient.transcribe.
+      ocr_service.dart  # R2 - OCR SUR L'APPAREIL (ML Kit, aucun réseau,
+                         # aucun coût IA) pour la photo du bon de livraison ;
+                         # le texte reconnu est transmis à /v1/ai/extract
+                         # (document_text) par ai_queue_processor.dart.
     remote/
       ai_api_client.dart   # R2 - client vers /v1/ai/transcribe et /v1/ai/extract,
                             # SEUL appel réseau optionnel de l'app (jamais requis
