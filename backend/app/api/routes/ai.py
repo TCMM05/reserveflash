@@ -59,12 +59,6 @@ def transcribe_audio(
     voir LocalCandidateFactSets)."""
     audio_bytes = base64.b64decode(payload.audio_base64)
     result = ai_provider.transcribe(audio_bytes, payload.mime_type)
-    # DEBUG TEMPORAIRE (diagnostic terrain R2 - vérifier que le micro de
-    # l'émulateur Android capte réellement la voix, pas du silence) :
-    # affiche le transcript UNIQUEMENT dans la console uvicorn locale,
-    # jamais renvoyé nulle part ailleurs. A retirer une fois le test terrain
-    # confirmé concluant.
-    print(f"[DEBUG transcript] {len(audio_bytes)} octets audio -> {result.text!r}")
     return TranscribeAudioResponse(
         text=result.text,
         provider=result.provider,

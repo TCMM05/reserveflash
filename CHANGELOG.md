@@ -2,6 +2,42 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.8] - R2 - première validation terrain réelle bout en bout (émulateur Android) - 2026-08-20
+
+Première exécution réelle de la chaîne complète R2 sur un appareil (émulateur
+Android via Android Studio) avec un vrai backend local et une vraie clé
+OpenAI : capture (photos + note vocale) → transcription IA → extraction IA
+→ écran de revue des faits (`facts_review_screen.dart`) → confirmation
+utilisateur → génération de la réserve. Résultat conforme à l'attendu sur
+tous les points observables :
+
+- Champs correctement extraits de la note vocale (produit, référence,
+  quantités attendue/reçue) avec badge "Compris par l'IA".
+- **GATE zéro invention confirmé en conditions réelles** : l'IA a suggéré un
+  type d'anomalie différent (quantité manquante, cohérent avec 10 attendues/
+  8 reçues) du type confirmé par l'utilisateur à l'étape S08 (produit
+  endommagé) - le bandeau informationnel `_IssueFactsSectionState` l'affiche
+  sans jamais écraser silencieusement le type confirmé (section 2.4).
+- Réserve générée reflétant les faits confirmés.
+
+Deux bugs réels trouvés et corrigés pendant ce diagnostic (voir aussi
+0.3.7) :
+1. Clé OpenAI restreinte + accès modèles du projet limité côté compte
+   OpenAI (config utilisateur, hors dépôt) - pas un bug de code, mais a
+   nécessité un diagnostic serveur temporaire (`GET /v1/models` en direct)
+   pour distinguer permission de clé vs accès modèle de projet, deux
+   réglages distincts sur platform.openai.com.
+2. Nom de fichier multipart sans extension rejeté par OpenAI (0.3.7).
+
+Voir `mobile/README.md`, section "Test sur émulateur Android - note micro" :
+le micro virtuel de l'AVD nécessite un redémarrage à froid après activation,
+sinon l'audio capté reste silencieux sans erreur explicite (facilement
+confondu avec un bug IA/réseau).
+
+Aucun changement de code dans ce lot au-delà du nettoyage d'un log de
+diagnostic temporaire (`backend/app/api/routes/ai.py`) ajouté puis retiré
+pendant ce diagnostic - voir 0.3.7 pour le correctif de code réel.
+
 ## [0.3.7] - R2 - correctif transcription OpenAI : nom de fichier sans extension (backend) - 2026-08-20
 
 Corrigé lors du premier test terrain réel (émulateur Android + backend

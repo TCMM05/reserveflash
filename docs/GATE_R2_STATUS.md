@@ -338,11 +338,32 @@ pas ajoutés en urgence à la volée. Les points 5/6 nécessitent des runs
 réseau `api.openai.com` dans ce sandbox) pour être validés empiriquement, pas
 seulement codés.
 
-### Recette terrain - PAS COMMENCÉE
+### Recette terrain - PREMIÈRE VALIDATION RÉELLE (émulateur, PAS encore appareil physique ni recette indépendante)
 
-Nécessite : une clé OpenAI réelle fournie par l'utilisateur, le mobile
-fonctionnel (voir ci-dessus), et un appareil Android réel - aucun des trois
-n'est disponible dans cet environnement de développement.
+Mise à jour 2026-08-20 : première exécution réelle de la chaîne complète R2
+(capture -> transcription IA -> extraction IA -> revue -> confirmation ->
+génération de réserve) sur un **émulateur** Android (Android Studio AVD),
+backend local (`uvicorn`) et une vraie clé OpenAI fournie et configurée par
+l'utilisateur lui-même (jamais transmise/manipulée par l'assistant, voir
+`docs/security.md`, GATE secret). Voir `CHANGELOG.md [0.3.8]` pour le détail
+complet (bugs trouvés/corrigés pendant ce diagnostic, dont [0.3.7]).
+
+Observé et conforme : extraction correcte des champs V1 prioritaires depuis
+une note vocale réelle, et **GATE zéro invention confirmé en conditions
+réelles** - une suggestion de type d'anomalie de l'IA différente du type
+confirmé par l'utilisateur à S08 n'a jamais écrasé ce dernier, affichée
+uniquement en bandeau informationnel.
+
+Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
+- Test sur un **appareil Android physique réel** (celui-ci était un
+  émulateur) - networking/latence/micro réels peuvent différer.
+- OCR (ML Kit), déclenchement automatique de la file au retour réseau,
+  exigences coût/tokens IA (points 9/10/12) : toujours pas commencés (voir
+  section "Avancement réel" ci-dessus).
+- **La recette indépendante elle-même** : cette session de test a été menée
+  par l'utilisateur avec l'assistant en accompagnement, ce n'est PAS la
+  recette indépendante prévue par le processus GATE. Aucun verdict "GATE R2
+  PASS" n'est déclaré ici ni ailleurs par ce document ou son auteur.
 
 ## Prochaines étapes
 

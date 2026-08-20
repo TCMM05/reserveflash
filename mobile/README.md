@@ -65,6 +65,22 @@ flutter test
 flutter build apk --debug   # Gate R0.1, point 1 - "application Flutter compilable"
 ```
 
+## Test sur émulateur Android - note micro (R2)
+
+Confirmé en test terrain (2026-08) : le micro virtuel de l'émulateur
+Android (AVD) doit être explicitement activé, ET l'émulateur redémarré à
+froid ("Cold Boot Now" dans Android Studio → Device Manager) après
+activation - sans ce redémarrage, le réglage semble actif mais l'audio
+capturé reste silencieux (Whisper transcrit alors `". . ."` ou un texte
+vide, jamais une erreur explicite - facilement confondu avec un bug IA/
+réseau alors que c'est uniquement l'émulateur qui ne capte rien).
+
+Étapes : Extended Controls (barre latérale de la fenêtre émulateur) →
+Microphone → activer "Enable Host Microphone Access" → fermer → Device
+Manager → flèche ▼ sur l'appareil virtuel → "Cold Boot Now". Vérifier
+ensuite indépendamment de l'app (ex: icône micro de l'app Google dans
+l'émulateur, transcription live) avant de tester le flux ReserveFlash.
+
 Si une de ces commandes échoue à cause d'une erreur de syntaxe dans le code
 écrit ici, c'est un bug de cette baseline à corriger en priorité (Gate R0.1 -
 voir la liste des 11 critères dans le CHANGELOG.md).
