@@ -381,15 +381,30 @@ réelles** - une suggestion de type d'anomalie de l'IA différente du type
 confirmé par l'utilisateur à S08 n'a jamais écrasé ce dernier, affichée
 uniquement en bandeau informationnel.
 
+**Mise à jour 2026-08-20 (suite) - OCR BL testé en conditions réelles** :
+chaîne complète confirmée fonctionnelle de bout en bout (capture -> mise en
+file -> OCR ML Kit on-device -> `/v1/ai/extract` -> GATE zéro invention ->
+revue des faits) - voir `CHANGELOG.md [0.3.10]`/`[0.3.11]` pour le détail
+complet (un vrai bug de séquencement trouvé et corrigé au passage : la mise
+en file OCR ne se déclenchait jamais dans le parcours nominal avant S08).
+Sur ce premier essai, texte manuscrit + bruit webcam d'émulateur -> OCR a
+reconnu un texte erroné ("Kolorena PRC 4SO" au lieu de "Perceuse ... PRC
+450") -> "Non détecté" à raison (GATE zéro invention, pas un bug). Limite
+ML Kit/manuscrit documentée dans `mobile/README.md` et la docstring de
+`MlKitOcrService`. **Reste à faire avant de considérer ce point clos** : un
+test avec du texte IMPRIMÉ (ou un vrai bon de livraison papier) pour
+valider un résultat correctement rempli de bout en bout, pas seulement le
+câblage.
+
 Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 - Test sur un **appareil Android physique réel** (celui-ci était un
-  émulateur) - networking/latence/micro réels peuvent différer.
-- OCR sur le BL câblé depuis (voir "Avancement réel" ci-dessus, ajouté après
-  cette validation terrain) - non testé en conditions réelles pour autant
-  (voir CHANGELOG, à faire en priorité au prochain test terrain). OCR sur
-  preuve photo générique, déclenchement automatique de la file au retour
-  réseau, exigences coût/tokens IA (points 9/10/12) : toujours pas commencés
-  (voir section "Avancement réel" ci-dessus).
+  émulateur) - networking/latence/micro/caméra réels peuvent différer.
+- Un test OCR réussi avec un résultat correctement extrait (voir
+  paragraphe ci-dessus - la chaîne est confirmée fonctionnelle, mais pas
+  encore un cas où les champs se remplissent réellement en conditions
+  terrain). OCR sur preuve photo générique, déclenchement automatique de la
+  file au retour réseau, exigences coût/tokens IA (points 9/10/12) :
+  toujours pas commencés (voir section "Avancement réel" ci-dessus).
 - **La recette indépendante elle-même** : cette session de test a été menée
   par l'utilisateur avec l'assistant en accompagnement, ce n'est PAS la
   recette indépendante prévue par le processus GATE. Aucun verdict "GATE R2

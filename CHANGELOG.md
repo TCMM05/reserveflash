@@ -2,6 +2,41 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.11] - R2 - OCR confirmé fonctionnel de bout en bout ; limite manuscrit/bruit identifiée - 2026-08-20
+
+Suite immédiate de `[0.3.10]`. Après correctif de mise en file et
+relèvement de la limite de dépenses OpenAI (voir plus bas, hors code), le
+test terrain butait encore sur "Non détecté" malgré un `POST
+/v1/ai/extract` en `200 OK`. Un log temporaire du texte reconnu par ML Kit
+(`mobile/lib/data/local/ocr_service.dart`, ajouté puis retiré dans la
+foulée - même discipline que les diagnostics précédents) a confirmé la
+cause : sur la photo de test (texte manuscrit cursif, webcam d'émulateur
+bruitée), ML Kit a reconnu **"Kolorena PRC 4SO"** au lieu de "Perceuse ...
+PRC 450" - un texte réel mais largement erroné. L'extraction IA en aval a
+donc, à raison, trouvé aucun champ fiable dans ce texte : **le "Non détecté"
+observé est le GATE zéro invention qui fonctionne comme prévu, pas un bug**.
+
+**Chaîne confirmée fonctionnelle de bout en bout par ce test** : capture
+photo -> mise en file (correctif `[0.3.10]`) -> OCR ML Kit on-device ->
+`POST /v1/ai/extract` -> réponse IA -> GATE zéro invention -> écran de
+revue des faits. Seule la QUALITÉ du texte reconnu par l'OCR sur ce cas
+précis (manuscrit + bruit) était en cause.
+
+**Limite documentée** (docstring `MlKitOcrService`, `mobile/README.md`) :
+ML Kit (script Latin) est conçu pour du texte imprimé - performance dégradée
+attendue sur de l'écriture manuscrite cursive, a fortiori bruitée. Un bon de
+livraison réel est en général tapé/imprimé (cas nominal), donc ce point ne
+devrait pas bloquer un usage réel, mais reste à confirmer sur un vrai bon de
+livraison papier photographié au téléphone (pas webcam d'émulateur) avant de
+le considérer clos - inscrit dans "Reste à faire" de
+`docs/GATE_R2_STATUS.md`.
+
+Fichiers modifiés : `mobile/lib/data/local/ocr_service.dart` (docstring
+uniquement - le log de debug ajouté pour ce diagnostic a été retiré),
+`backend/app/infrastructure/ai/openai_provider.py` (idem, log de debug 429
+retiré une fois la cause - `insufficient_quota` / limite de dépenses du
+projet OpenAI côté compte utilisateur, hors code - confirmée).
+
 ## [0.3.10] - R2 - correctif : mise en file OCR jamais déclenchée dans le parcours nominal - 2026-08-20
 
 Premier test terrain de `[0.3.9]` (OCR) : écran "Vérifiez les faits" affichant

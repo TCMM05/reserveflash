@@ -44,6 +44,19 @@ abstract interface class OcrService {
 /// la file séquentiellement - défense ceinture-bretelles) et garantit que
 /// `close()` (libération des ressources natives ML Kit) est systématique,
 /// y compris en cas d'exception (`try`/`finally`).
+///
+/// **Limite connue confirmée en test terrain (R2, 2026-08)** : ce
+/// recognizer est conçu pour du texte IMPRIMÉ - sur une photo d'écriture
+/// MANUSCRITE cursive (a fortiori bruitée, ex. webcam d'émulateur), il peut
+/// renvoyer un texte largement erroné (confirmé : "Perceuse / PRC 450" lu
+/// comme "Kolorena PRC 4SO") plutôt qu'une chaîne vide - dans ce cas
+/// l'extraction IA en aval ne trouve légitimement aucun champ fiable
+/// ("Non détecté", GATE zéro invention - ce n'est PAS un bug du câblage
+/// OCR->extraction, qui est confirmé fonctionnel de bout en bout). Un bon de
+/// livraison réel est en général tapé/imprimé, donc ce cas dégradé ne
+/// devrait pas être le cas nominal en usage réel - mais reste à valider sur
+/// un vrai bon de livraison papier (photo au téléphone, pas webcam
+/// d'émulateur) avant de considérer ce point clos.
 final class MlKitOcrService implements OcrService {
   const MlKitOcrService();
 
@@ -53,14 +66,6 @@ final class MlKitOcrService implements OcrService {
     try {
       final InputImage inputImage = InputImage.fromFilePath(imagePath);
       final RecognizedText recognizedText = await recognizer.processImage(inputImage);
-      // DEBUG TEMPORAIRE (diagnostic terrain R2, "Non détecté" malgré une
-      // photo lisible par un humain) - confirme si ML Kit lit vraiment du
-      // texte sur les photos prises en émulateur (webcam) ; à retirer une
-      // fois la cause confirmée. Visible dans la console `flutter run`.
-      // ignore: avoid_print
-      print(
-        '[DEBUG OCR] ${recognizedText.text.isEmpty ? "(vide)" : recognizedText.text}',
-      );
       return recognizedText.text;
     } finally {
       await recognizer.close();

@@ -81,6 +81,25 @@ Manager → flèche ▼ sur l'appareil virtuel → "Cold Boot Now". Vérifier
 ensuite indépendamment de l'app (ex: icône micro de l'app Google dans
 l'émulateur, transcription live) avant de tester le flux ReserveFlash.
 
+## Test sur émulateur Android - note caméra/OCR (R2)
+
+Comme pour le micro, la caméra virtuelle par défaut d'un AVD ("Emulated")
+n'affiche qu'une fausse scène 3D animée, sans texte réel - inutile pour
+tester l'OCR. Il faut la basculer sur le flux d'une webcam physique : Device
+Manager → crayon (Edit) sur l'AVD → "Show Advanced Settings" → Camera → Back
+= Webcam0 → enregistrer → "Cold Boot Now" (même exigence que le micro, un
+simple redémarrage à chaud ne suffit pas).
+
+Confirmé en test terrain (2026-08) : `google_mlkit_text_recognition`
+(script Latin) est conçu pour du texte IMPRIMÉ. Sur une photo de texte
+MANUSCRIT cursif via webcam (bruit d'image), il peut renvoyer un texte
+reconnu mais largement erroné plutôt qu'une chaîne vide (ex. "Perceuse /
+PRC 450" lu comme "Kolorena PRC 4SO") - l'extraction IA en aval trouve alors
+légitimement "Non détecté" (GATE zéro invention qui fonctionne comme prévu,
+pas un bug de câblage OCR). Pour un test terrain propre du pipeline OCR de
+bout en bout, préférer du texte IMPRIMÉ/tapé (affiché en gros sur un écran,
+ou un vrai bon de livraison papier) plutôt que manuscrit.
+
 Si une de ces commandes échoue à cause d'une erreur de syntaxe dans le code
 écrit ici, c'est un bug de cette baseline à corriger en priorité (Gate R0.1 -
 voir la liste des 11 critères dans le CHANGELOG.md).
