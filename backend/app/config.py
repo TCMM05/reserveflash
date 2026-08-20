@@ -47,6 +47,17 @@ class Settings(BaseSettings):
     # Secrets - toujours optionnels par défaut (None), jamais de valeur en
     # dur. Requis uniquement quand le provider correspondant est activé.
     openai_api_key: SecretStr | None = None
+
+    # R2 (app/infrastructure/ai/openai_provider.py) : noms de modèles et
+    # réglages réseau, tous surchargeables par variable d'environnement -
+    # jamais de comportement figé qui obligerait un déploiement de code pour
+    # changer de modèle (section 7.3 : "tout changement de
+    # prompt/schéma/modèle déclenche un nouveau run benchmark").
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_transcription_model: str = "whisper-1"
+    openai_extraction_model: str = "gpt-4o-mini"
+    openai_request_timeout_seconds: float = 30.0
+
     supabase_service_role_key: SecretStr | None = None
     supabase_url: str | None = None
     storage_bucket: str = "reserveflash-evidence"

@@ -7,6 +7,11 @@ from __future__ import annotations
 
 import base64
 
+from app.api.deps import get_ai_provider
+from app.domain.fact_set import CandidateFactData
+from app.domain.value_objects import ConfidenceLevel, FactSource, IssueType
+from app.infrastructure.ai.mock_provider import MockAIProvider
+
 
 def test_transcribe_requires_no_authentication(client):
     """Point 13 : aucune création de compte cloud requise. Aucun header
@@ -50,6 +55,81 @@ def test_extract_rejects_extra_fields(client):
     response = client.post("/v1/ai/extract", json=payload)
     assert response.status_code == 400
     assert response.json()["code"] == "VALIDATION_ERROR"
+
+
+def test_extract_screens_out_forbidden_content_even_from_a_compliant_provider(client):
+    """R2 - "Validation sémantique obligatoire" : même si le provider IA
+    (ici forcé via un mock injecté) renvoie un candidat structurellement
+    valide mais contenant le cas nommément cité par l'équipe
+    (packaging_condition = "transporteur responsable"), la route /v1/ai/extract
+    ne doit jamais le laisser passer tel quel."""
+    forced = CandidateFactData(
+        issue_type_candidate=IssueType.PACKAGING_DAMAGE,
+        fields={
+            "packaging_condition": {
+                "value": "transporteur responsable",
+                "source": FactSource.VOICE_TRANSCRIPT,
+                "confidence": ConfidenceLevel.HIGH,
+                "ambiguous": False,
+            },
+            "product_label": {
+                "value": "PAC-284",
+                "source": FactSource.VOICE_TRANSCRIPT,
+                "confidence": ConfidenceLevel.HIGH,
+                "ambiguous": False,
+            },
+        },
+        requires_review=False,
+    )
+    client.app.dependency_overrides[get_ai_provider] = lambda: MockAIProvider(
+        forced_extraction=forced
+    )
+    try:
+        payload = {
+            "transcript": "c'est clairement la faute du transporteur",
+            "prompt_version": "v1",
+        }
+        response = client.post("/v1/ai/extract", json=payload)
+    finally:
+        del client.app.dependency_overrides[get_ai_provider]
+
+    assert response.status_code == 200
+    body = response.json()["candidate"]
+    assert "packaging_condition" not in body["fields"]
+    assert "product_label" in body["fields"]
+    assert body["requires_review"] is True
+
+
+def test_extract_provider_unavailable_maps_to_503(client):
+    """R2 - "Échec IA" : une indisponibilité provider ne doit jamais faire
+    perdre de preuve ni renvoyer une erreur 500 opaque - 503 AI_UNAVAILABLE,
+    conforme à la taxonomie d'erreurs existante (app/api/errors.py)."""
+    client.app.dependency_overrides[get_ai_provider] = lambda: MockAIProvider(
+        raise_unavailable=True
+    )
+    try:
+        response = client.post(
+            "/v1/ai/extract", json={"document_text": "x", "prompt_version": "v1"}
+        )
+    finally:
+        del client.app.dependency_overrides[get_ai_provider]
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "AI_UNAVAILABLE"
+
+
+def test_transcribe_provider_unavailable_maps_to_503(client):
+    client.app.dependency_overrides[get_ai_provider] = lambda: MockAIProvider(
+        raise_unavailable=True
+    )
+    try:
+        payload = {"audio_base64": base64.b64encode(b"x").decode(), "mime_type": "audio/wav"}
+        response = client.post("/v1/ai/transcribe", json=payload)
+    finally:
+        del client.app.dependency_overrides[get_ai_provider]
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "AI_UNAVAILABLE"
 
 
 def test_ai_routes_do_not_expose_incident_or_organization_concepts(client):

@@ -96,7 +96,7 @@
           "ai"
         ],
         "summary": "Extract Candidate Facts",
-        "description": "F07/F08 (section 2.1) - extrait un `CandidateFactData` structuré à\npartir d'un texte déjà transcrit/OCRisé. Le résultat DOIT ensuite passer\npar la revue utilisateur (F09) puis\n`lib/domain/liability_guard.dart`/`app/domain/liability_guard.py` avant\nde pouvoir devenir un `ConfirmedFactData` - jamais directement utilisable\npar un Reserve Composer (GATE zéro invention, ADR 0001).",
+        "description": "F07/F08 (section 2.1) - extrait un `CandidateFactData` structuré à\npartir d'un texte déjà transcrit/OCRisé. Le résultat DOIT ensuite passer\npar la revue utilisateur (F09) puis\n`lib/domain/liability_guard.dart`/`app/domain/liability_guard.py` avant\nde pouvoir devenir un `ConfirmedFactData` - jamais directement utilisable\npar un Reserve Composer (GATE zéro invention, ADR 0001).\n\nR2 (section \"Validation sémantique obligatoire\") : avant de renvoyer le\ncandidat, `screen_candidate_fact_data` (app/domain/candidate_guard.py)\nretire tout champ contenant une attribution de responsabilité, une\nconclusion/qualification juridique, une promesse d'indemnisation, un\nmontant inventé, ou une quantité négative - appliqué ICI, au point\nd'entrée unique des candidats côté backend, pour couvrir tout provider\n(mock ou réel) sans dépendre de sa discipline interne.",
         "operationId": "extract_candidate_facts_v1_ai_extract_post",
         "requestBody": {
           "content": {

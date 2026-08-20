@@ -69,7 +69,15 @@ FREE_TEXT_FIELDS: tuple[str, ...] = (
 # une partie responsable. Un rejet legitime mais trop strict se corrige en
 # reformulant le constat ; un contenu interdit qui fuite dans une reserve
 # signee ne se corrige pas.
-_FORBIDDEN_PATTERNS: dict[str, re.Pattern[str]] = {
+#
+# R2 (voir app/domain/candidate_guard.py) : ces motifs sont desormais
+# PUBLICS et partages avec le garde-fou applique aux CandidateFactData
+# (sortie brute IA, avant toute confirmation utilisateur). Une seule source
+# de verite pour "qu'est-ce qu'un contenu interdit dans une reserve" evite
+# qu'un motif ajoute/corrige d'un cote (ex: nouvelle formulation de
+# responsabilite reperee lors du benchmark R2) ne soit pas applique de
+# l'autre.
+FORBIDDEN_PATTERNS: dict[str, re.Pattern[str]] = {
     "LIABILITY_ATTRIBUTION": re.compile(
         r"\b(responsab(?:le|ilité)s?|fautifs?|\bfaute\b|"
         r"imputable(?:\s+(?:au|à|aux))?|"
@@ -110,7 +118,7 @@ def screen_confirmed_fact(fact: ConfirmedFactData) -> None:
         value = getattr(fact, field_name, None)
         if not value or not isinstance(value, str):
             continue
-        for violation_code, pattern in _FORBIDDEN_PATTERNS.items():
+        for violation_code, pattern in FORBIDDEN_PATTERNS.items():
             match = pattern.search(value)
             if match:
                 raise LiabilityAttributionError(

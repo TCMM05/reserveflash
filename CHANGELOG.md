@@ -2,6 +2,87 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.0] - R2 (démarrage) - pipeline IA backend réel (voix/OCR -> CandidateFacts) - 2026-08-20
+
+**R2 démarré à partir du freeze `r1-final` (commit `65287f7`), architecture
+Local-First strictement conservée.** Ce sont les toutes premières briques de
+R2 - uniquement le backend, vérifié réellement (`pytest`, 116/116 verts,
+`ruff check` propre) dans cet environnement. Le mobile (OCR on-device,
+câblage `AiOperationQueue`, écran de revue réel) reste à faire et devra être
+vérifié sur poste/téléphone utilisateur comme pour R0/R1.
+
+1. **`backend/app/infrastructure/ai/openai_provider.py`** (nouveau) -
+   implémentation réelle de `AIProvider` (`transcribe`, `extract_candidate_facts`)
+   via l'API HTTP d'OpenAI directement (`httpx`), pas le SDK `openai` - ce
+   sandbox de développement n'a aucun accès réseau vers `api.openai.com`
+   (vérifié), donc aucune vérification réelle contre le SDK n'était possible ;
+   l'API HTTP REST est un contrat stable et permet un test unitaire précis
+   via `httpx.MockTransport` (11 tests, `tests/infrastructure/test_openai_provider.py`),
+   sans jamais toucher au réseau réel. Gère : timeout/erreur réseau/5xx ->
+   `AIUnavailableError`, 429 -> `AIRateLimitedError`, JSON de sortie invalide
+   -> **exactement une** tentative de réparation contrôlée puis
+   `AIInvalidOutputError` (jamais de boucle, section "Échec IA" de la
+   demande R2).
+2. **`app/infrastructure/ai/__init__.py`** - la factory instancie désormais
+   réellement `OpenAIProvider` quand `RESERVEFLASH_AI_PROVIDER=openai` (ne
+   lève plus `NotImplementedError`).
+3. **`app/domain/candidate_guard.py`** (nouveau) - garde-fou déterministe
+   appliqué aux `CandidateFactData` (sortie brute IA, avant confirmation
+   utilisateur), en complément de `liability_guard.py` (qui protège les
+   `ConfirmedFactData`, après confirmation). Retire silencieusement (sans
+   jamais lever d'exception ni bloquer le dossier) tout champ contenant une
+   attribution de responsabilité, une conclusion/qualification juridique,
+   une promesse d'indemnisation, un montant inventé (mêmes motifs que
+   `liability_guard`, désormais publics et partagés via
+   `liability_guard.FORBIDDEN_PATTERNS` - une seule source de vérité), ou
+   une quantité négative (`expected_quantity`/`received_quantity`/
+   `affected_quantity`). Rejoue explicitement le cas cité par l'équipe :
+   `packaging_condition = "transporteur responsable"` ne doit jamais
+   atteindre l'écran de revue. 14 tests (`tests/domain/test_candidate_guard.py`).
+   Appliqué au point d'entrée unique des candidats côté backend
+   (`app/api/routes/ai.py::extract_candidate_facts`), donc actif pour tout
+   provider (mock ou réel), sans dépendre de sa discipline interne.
+4. **`app/domain/clarification_questions.py`** (nouveau) - catalogue
+   contrôlé des `clarification_question_id` (schéma `candidate_fact_set.v1` :
+   "jamais une question générée librement par le LLM"). Le modèle ne peut
+   indiquer qu'un NOM de champ candidat (`most_uncertain_field`, métadonnée
+   hors-schéma) ; c'est le code, jamais le modèle, qui traduit ce nom en
+   identifiant catalogue - un nom halluciné/hors catalogue est ignoré. 4 tests.
+5. **`prompts/extraction_fr_v1.txt`** (nouveau, premier fichier du dossier -
+   jusqu'ici vide en R0/R1) - prompt système versionné de l'extraction :
+   liste fermée des 8 champs V1 prioritaires, règles d'or explicites
+   (UNKNOWN plutôt qu'invention, négations, incertitude non résolue
+   arbitrairement, aucune attribution de responsabilité/conclusion
+   juridique/montant, quantités jamais négatives).
+6. **`app/config.py`** - nouveaux réglages `openai_base_url`,
+   `openai_transcription_model` (défaut `whisper-1`),
+   `openai_extraction_model` (défaut `gpt-4o-mini`),
+   `openai_request_timeout_seconds`, tous surchargeables par variable
+   d'environnement.
+7. **`app/domain/liability_guard.py`** - `_FORBIDDEN_PATTERNS` renommé en
+   `FORBIDDEN_PATTERNS` (public) pour être partagé avec `candidate_guard.py` :
+   comportement strictement inchangé (27 tests existants toujours verts),
+   seule la visibilité change.
+8. **`app/api/routes/ai.py`** - `extract_candidate_facts` applique désormais
+   `screen_candidate_fact_data` avant de renvoyer la réponse (voir point 3).
+   1 nouveau test dédié + 2 tests de mapping d'erreur (`AIUnavailableError`
+   -> 503, sur `/extract` et `/transcribe`).
+
+**Non-régression** : les 84 tests backend R0/R1 existants restent verts,
+inchangés, plus les 32 nouveaux tests ci-dessus = 116/116 (3 skips
+préexistants, indépendants de PostgreSQL, inchangés). `ruff check` propre.
+
+**Reste à faire avant toute candidate `r2-candidate`** : côté mobile - OCR
+on-device (ML Kit), entité Dart `CandidateFactSet` (absente malgré les
+tables Drift déjà prêtes), câblage `AiOperationQueue`/`PendingAIJob`
+online/offline, écran de revue réel (`facts_review_screen.dart` est
+aujourd'hui un stub à champs codés en dur) ; côté qualification - corpus de
+benchmark versionné (CORE/PARAPHRASE/NEGATION/AUDIO/OCR/UNKNOWN/SAFETY) et
+scorer ; recette terrain réelle sur Android avec une clé OpenAI réelle
+(aucun appel réseau réel vers OpenAI n'a été possible dans cet
+environnement de développement - à vérifier en conditions réelles). Cette
+entrée ne déclare aucune fonctionnalité R2 "terminée" au sens du Gate R2.
+
 ## [0.2.1] - R1 correction ciblée post-recette terrain (photo/audio) - 2026-08-19
 
 **Vérifié par exécution réelle sur le poste de l'utilisateur** :

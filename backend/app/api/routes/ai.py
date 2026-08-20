@@ -43,6 +43,7 @@ from app.api.schemas import (
     TranscribeAudioResponse,
 )
 from app.application.ports import AIProvider
+from app.domain.candidate_guard import screen_candidate_fact_data
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -76,14 +77,23 @@ def extract_candidate_facts(
     par la revue utilisateur (F09) puis
     `lib/domain/liability_guard.dart`/`app/domain/liability_guard.py` avant
     de pouvoir devenir un `ConfirmedFactData` - jamais directement utilisable
-    par un Reserve Composer (GATE zéro invention, ADR 0001)."""
+    par un Reserve Composer (GATE zéro invention, ADR 0001).
+
+    R2 (section "Validation sémantique obligatoire") : avant de renvoyer le
+    candidat, `screen_candidate_fact_data` (app/domain/candidate_guard.py)
+    retire tout champ contenant une attribution de responsabilité, une
+    conclusion/qualification juridique, une promesse d'indemnisation, un
+    montant inventé, ou une quantité négative - appliqué ICI, au point
+    d'entrée unique des candidats côté backend, pour couvrir tout provider
+    (mock ou réel) sans dépendre de sa discipline interne."""
     result = ai_provider.extract_candidate_facts(
         document_text=payload.document_text,
         transcript=payload.transcript,
         prompt_version=payload.prompt_version,
     )
+    screened_candidate = screen_candidate_fact_data(result.candidate)
     return ExtractCandidateFactsResponse(
-        candidate=result.candidate,
+        candidate=screened_candidate,
         provider=result.provider,
         model_id=result.model_id,
         prompt_version=result.prompt_version,
