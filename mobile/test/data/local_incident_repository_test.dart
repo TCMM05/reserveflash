@@ -371,12 +371,12 @@ void main() {
         const CandidateFactData extracted = CandidateFactData(
           issueTypeCandidate: IssueType.missingQty,
           fields: <String, CandidateField>{
-            'expected_quantity': const CandidateField(
+            'expected_quantity': CandidateField(
               value: 5,
               source: FactSource.voiceTranscript,
               confidence: ConfidenceLevel.high,
             ),
-            'received_quantity': const CandidateField(
+            'received_quantity': CandidateField(
               value: 4,
               source: FactSource.voiceTranscript,
               confidence: ConfidenceLevel.high,
@@ -430,12 +430,12 @@ void main() {
         const CandidateFactData tainted = CandidateFactData(
           issueTypeCandidate: IssueType.packagingDamage,
           fields: <String, CandidateField>{
-            'packaging_condition': const CandidateField(
+            'packaging_condition': CandidateField(
               value: 'transporteur responsable',
               source: FactSource.voiceTranscript,
               confidence: ConfidenceLevel.high,
             ),
-            'product_label': const CandidateField(
+            'product_label': CandidateField(
               value: 'PAC-284',
               source: FactSource.ocr,
               confidence: ConfidenceLevel.high,
