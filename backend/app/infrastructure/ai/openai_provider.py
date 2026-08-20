@@ -252,6 +252,17 @@ class OpenAIProvider(AIProvider):
     def _raise_for_provider_errors(response: httpx.Response, *, context: str) -> None:
         if response.status_code == httpx.codes.TOO_MANY_REQUESTS:
             raise AIRateLimitedError(f"OpenAI a limité le débit ({context}).")
+        if response.status_code >= 400:
+            # DEBUG TEMPORAIRE (diagnostic terrain R2, à retirer une fois la
+            # cause du 403/503 observé identifiée avec certitude) : affiche
+            # le corps d'erreur OpenAI complet UNIQUEMENT dans les logs
+            # serveur locaux (console uvicorn) - jamais renvoyé au client
+            # mobile, qui reçoit toujours le message générique ci-dessous
+            # (aucune fuite de détail sensible côté app).
+            print(
+                f"[DEBUG OpenAI {context}] status={response.status_code} "
+                f"body={response.text[:2000]!r}"
+            )
         if response.status_code >= 500:
             raise AIUnavailableError(
                 f"OpenAI indisponible ({context}), statut {response.status_code}."
