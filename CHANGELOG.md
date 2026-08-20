@@ -2,6 +2,27 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.12] - R2 - OCR validé en conditions réelles avec un résultat correctement rempli - 2026-08-20
+
+Suite immédiate de `[0.3.11]`. Même parcours de test refait avec le même
+texte (produit/référence/quantités), cette fois affiché en gros IMPRIMÉ sur
+un écran de téléphone plutôt qu'écrit à la main, photographié via la webcam
+de l'émulateur (toujours en mode Webcam0 + cold boot, voir
+`mobile/README.md`).
+
+Résultat conforme à l'attendu sur `facts_review_screen.dart` : "Produit :
+perceuse", "Référence produit : PRC 450", "Quantité attendue : 10", chaque
+champ avec le badge "Compris par l'IA". **OCR (ML Kit) confirmé fonctionnel
+de bout en bout avec un résultat correctement rempli** - capture -> mise en
+file (`[0.3.10]`) -> OCR on-device -> `/v1/ai/extract` -> GATE zéro
+invention -> revue des faits. Même niveau de validation terrain que la note
+vocale (`[0.3.8]`) : première preuve réelle, pas encore appareil physique ni
+recette indépendante (voir `docs/GATE_R2_STATUS.md`, aucun verdict "GATE R2
+PASS" déclaré).
+
+Aucun changement de code dans ce lot - uniquement la confirmation terrain et
+la mise à jour de `docs/GATE_R2_STATUS.md` (section "Recette terrain").
+
 ## [0.3.11] - R2 - OCR confirmé fonctionnel de bout en bout ; limite manuscrit/bruit identifiée - 2026-08-20
 
 Suite immédiate de `[0.3.10]`. Après correctif de mise en file et

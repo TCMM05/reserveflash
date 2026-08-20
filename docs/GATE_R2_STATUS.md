@@ -391,20 +391,27 @@ Sur ce premier essai, texte manuscrit + bruit webcam d'émulateur -> OCR a
 reconnu un texte erroné ("Kolorena PRC 4SO" au lieu de "Perceuse ... PRC
 450") -> "Non détecté" à raison (GATE zéro invention, pas un bug). Limite
 ML Kit/manuscrit documentée dans `mobile/README.md` et la docstring de
-`MlKitOcrService`. **Reste à faire avant de considérer ce point clos** : un
-test avec du texte IMPRIMÉ (ou un vrai bon de livraison papier) pour
-valider un résultat correctement rempli de bout en bout, pas seulement le
-câblage.
+`MlKitOcrService`.
+
+**Mise à jour 2026-08-20 (suite, résultat positif) - texte imprimé testé** :
+même parcours refait avec le même texte affiché en gros (imprimé, non
+manuscrit) sur un écran de téléphone plutôt qu'écrit à la main. Résultat
+conforme à l'attendu : `facts_review_screen.dart` affiche "Produit :
+perceuse", "Référence produit : PRC 450", "Quantité attendue : 10" (badge
+"Compris par l'IA" sur chaque champ). **OCR confirmé fonctionnel de bout en
+bout avec un résultat correctement rempli**, pas seulement le câblage - au
+même niveau de validation terrain que la note vocale (`[0.3.8]`). Voir
+`CHANGELOG.md [0.3.12]`.
 
 Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 - Test sur un **appareil Android physique réel** (celui-ci était un
   émulateur) - networking/latence/micro/caméra réels peuvent différer.
-- Un test OCR réussi avec un résultat correctement extrait (voir
-  paragraphe ci-dessus - la chaîne est confirmée fonctionnelle, mais pas
-  encore un cas où les champs se remplissent réellement en conditions
-  terrain). OCR sur preuve photo générique, déclenchement automatique de la
-  file au retour réseau, exigences coût/tokens IA (points 9/10/12) :
-  toujours pas commencés (voir section "Avancement réel" ci-dessus).
+- Test avec un **vrai bon de livraison papier réel** (celui-ci était un
+  texte imprimé affiché sur un écran, pas du papier photographié) - à faire
+  idéalement avant appareil physique. OCR sur preuve photo générique,
+  déclenchement automatique de la file au retour réseau, exigences
+  coût/tokens IA (points 9/10/12) : toujours pas commencés (voir section
+  "Avancement réel" ci-dessus).
 - **La recette indépendante elle-même** : cette session de test a été menée
   par l'utilisateur avec l'assistant en accompagnement, ce n'est PAS la
   recette indépendante prévue par le processus GATE. Aucun verdict "GATE R2
@@ -415,10 +422,11 @@ Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 1. Mobile : déclenchement de la file au retour réseau +
    `document_metadata_screen.dart` (S07). Écran de revue réel et bascule
    manuelle/UNKNOWN sur disjoncteur de retry : FAIT (`[0.3.6]`, voir section
-   "Avancement réel" ci-dessus). OCR (ML Kit) sur le BL : FAIT (ce lot, voir
-   section "Avancement réel" ci-dessus) - reste OCR sur preuve photo
-   générique (`extractFromPhoto`) et un test terrain réel de ce nouveau
-   chemin (non testé en conditions réelles à ce stade).
+   "Avancement réel" ci-dessus). OCR (ML Kit) sur le BL : FAIT et **validé en
+   conditions réelles avec un résultat correctement rempli** (`[0.3.9]` à
+   `[0.3.12]`, voir "Recette terrain" ci-dessus) - reste OCR sur preuve photo
+   générique (`extractFromPhoto`) et un test avec un vrai bon de livraison
+   papier (pas un écran).
 2. Exigences coût/tokens IA (retour équipe, voir section dédiée) : journal
    de consommation backend (point 9), métriques coût benchmark (point 10),
    circuit breaker budgétaire (point 12) - à séquencer explicitement avec
