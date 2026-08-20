@@ -78,17 +78,29 @@ lib/
     router/           # go_router, une route par écran S01-S20 (section 3.2)
                        # - AUCUN redirect d'auth obligatoire (R0.1, point 13)
     widgets/          # composants partagés (RfScreenStub, ...)
+    config/
+      backend_config.dart  # R2 - URL du backend ReserveFlash (jamais de clé
+                            # OpenAI ici, voir docs/security.md, GATE secret)
+    providers/
+      app_providers.dart   # câblage Riverpod - SEUL point de construction de
+                            # AppDatabase/IncidentRepository/Dio/AiApiClient
   domain/
     value_objects/     # miroirs Dart de backend/app/domain/value_objects.py
-    fact_set/           # ConfirmedFactData (GATE zéro invention, section 2.4)
-    entities/           # Incident, Issue, ConfirmedFactSet, ReserveText,
-                        # EvidenceAsset, AiQueueItem (machine à états, section 2.2)
-    errors/             # DomainException + LiabilityAttributionException
+    fact_set/           # ConfirmedFactData, CandidateFactData (GATE zéro
+                        # invention, section 2.4 - candidat vs confirmé)
+    entities/           # Incident, Issue, ConfirmedFactSet, CandidateFactSet,
+                        # ReserveText, EvidenceAsset, AiQueueItem (section 2.2)
+    errors/             # DomainException + sous-classes (LiabilityAttribution,
+                        # R2 : AiUnavailable/AiInvalidOutput/AiRateLimited/
+                        # AiRequestFailed - miroir de backend/app/domain/errors.py)
     repositories/        # IncidentRepository (interface, R0.1 point 12) -
                          # la logique métier ne dépend QUE de ce fichier,
                          # jamais de Drift directement.
     liability_guard.dart      # garde-fou anti-attribution de responsabilité
                                # (R0.1 point 8 - correctif de sécurité)
+    candidate_guard.dart       # R2 - même garde-fou appliqué AVANT revue
+                               # utilisateur, sur les CandidateFactData
+    clarification_questions.dart  # R2 - catalogue contrôlé de questions
     reserve_composer.dart     # Reserve Composer LOCAL (R0.1 point 6 - tourne
                                # désormais sur l'appareil, voir ADR 0002)
     templates/fr_v1.dart      # template déterministe (miroir du backend)
@@ -96,6 +108,12 @@ lib/
     local/
       app_database.dart              # schéma Drift - SOURCE DE VÉRITÉ V1
       local_incident_repository.dart # seule implémentation V1 de IncidentRepository
+    remote/
+      ai_api_client.dart   # R2 - client vers /v1/ai/transcribe et /v1/ai/extract,
+                            # SEUL appel réseau optionnel de l'app (jamais requis
+                            # pour la capture locale, section 8.1) ; n'appelle
+                            # JAMAIS OpenAI directement (flux Flutter -> Backend
+                            # ReserveFlash -> OpenAI -> Backend -> Flutter)
     backup/
       backup_service.dart    # "Export mes données / Sauvegarde" (R0.1 point 9)
     share/
@@ -108,6 +126,12 @@ test/
                         # (rejoue le bug "packagingCondition = 'transporteur
                         # responsable'" signalé dans la demande corrective R0.1)
                         # et reserve_composer_test.dart (E2E-01 à E2E-07).
+  data/
+    remote/
+      ai_api_client_test.dart  # R2 - teste AiApiClient contre un
+                                # AiHttpTransport factice fait à la main (pas
+                                # de mock package:dio - voir docstring de
+                                # ai_api_client.dart pour la justification)
 ```
 
 ## Pourquoi le Reserve Composer EST dupliqué ici (changement R0.1)

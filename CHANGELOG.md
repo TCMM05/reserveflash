@@ -2,6 +2,53 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.3] - R2 - client HTTP mobile vers /v1/ai/* - 2026-08-20
+
+Deuxième lot mobile de R2 : le client HTTP qui relie l'app au pipeline IA
+backend déjà livré (`[0.3.0]`) - pièce manquante entre "un fichier audio/un
+texte OCRisé sur l'appareil" et "un `CandidateFactSet` sauvegardé"
+(`[0.3.2]`). Le câblage de la file `AiOperationQueue` (déclenchement online/
+offline, retry) et l'OCR on-device restent à faire (voir "Reste à faire").
+
+1. **`mobile/lib/domain/errors/domain_errors.dart`** - ajout de
+   `AiUnavailableException`/`AiInvalidOutputException`/
+   `AiRateLimitedException`/`AiRequestFailedException`, mêmes `code` que
+   `backend/app/domain/errors.py::AIUnavailableError`/`AIInvalidOutputError`/
+   `AIRateLimitedError`, pour que l'enveloppe d'erreur JSON du backend
+   (`{"code", "message", "trace_id"}`, voir `backend/app/api/errors.py`) se
+   retraduise directement en exception typée côté mobile.
+2. **`mobile/lib/data/remote/ai_api_client.dart`** (nouveau) - `AiApiClient`,
+   miroir de `backend/app/api/routes/ai.py` (`/v1/ai/transcribe`,
+   `/v1/ai/extract`). Construit au-dessus d'une frontière volontairement
+   minimale, `AiHttpTransport` (implémentation réelle `DioAiHttpTransport`
+   au-dessus de `package:dio`) plutôt que directement sur `Dio` : ce sandbox
+   ne pouvant vérifier par exécution aucun mécanisme de mock spécifique à
+   `dio`, les tests passent par une implémentation entièrement faite à la
+   main de cette frontière - même logique que le choix de `httpx` brut
+   (plutôt que le SDK `openai`) pour `openai_provider.py` (`[0.3.0]`).
+   `candidate` reçu est déjà filtré côté backend
+   (`screen_candidate_fact_data`) mais reste soumis à
+   `candidate_guard.dart::screenCandidateFactData` avant toute persistance
+   (défense en profondeur, déjà en place depuis `[0.3.2]`).
+3. **`mobile/lib/core/config/backend_config.dart`** (nouveau) - URL de base
+   du backend, surchargeable via `--dart-define=RESERVEFLASH_BACKEND_BASE_URL=...`
+   (défaut `http://10.0.2.2:8000`, alias standard émulateur Android ->
+   hôte ; documenté comme inadapté à un simulateur iOS/appareil physique).
+4. **`mobile/lib/core/providers/app_providers.dart`** - `dioProvider`/
+   `aiApiClientProvider`, seul point de construction du client HTTP de
+   l'app (même principe que `incidentRepositoryProvider`).
+5. **Tests écrits (non exécutés, voir `mobile/README.md`)** :
+   `mobile/test/data/remote/ai_api_client_test.dart` - succès transcribe/
+   extract, panne de transport -> `AiUnavailableException`, mapping complet
+   des codes d'erreur backend (`AI_UNAVAILABLE`/`AI_INVALID_OUTPUT`/
+   `RATE_LIMITED`/`VALIDATION_ERROR`/`INTERNAL_ERROR` non catégorisé), corps
+   2xx non-JSON.
+
+**Reste à faire (R2, mobile)** : câblage `AiOperationQueue`/`PendingAIJob`
+(déclenchement online, file offline, rejeu au retour réseau) consommant
+`AiApiClient` + `saveCandidateFactSet` ; OCR on-device (ML Kit) ; écran de
+revue réel `facts_review_screen.dart`.
+
 ## [0.3.2] - R2 - CandidateFactSet côté mobile (entité + garde-fous + repository) - 2026-08-20
 
 Premier lot mobile de R2 (voir `docs/GATE_R2_STATUS.md`, section "Mobile" -

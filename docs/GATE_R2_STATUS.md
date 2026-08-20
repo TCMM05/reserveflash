@@ -122,11 +122,22 @@ corrigée.
     par aucun repository) ; `saveCandidateFactSet` applique
     `screenCandidateFactData` avant toute écriture, même principe que
     `confirmFacts`/`liability_guard.dart`.
+  - `app/data/remote/ai_api_client.dart` : `AiApiClient`, miroir de
+    `backend/app/api/routes/ai.py` (`/v1/ai/transcribe`, `/v1/ai/extract`),
+    au-dessus d'une frontière `AiHttpTransport` testée sans dépendre des
+    mécanismes de mock internes à `package:dio` (voir CHANGELOG `[0.3.3]`).
+    Retraduit l'enveloppe d'erreur backend en `AiUnavailableException`/
+    `AiInvalidOutputException`/`AiRateLimitedException`/
+    `AiRequestFailedException` (`app/domain/errors/domain_errors.dart`).
+  - `app/core/config/backend_config.dart` + câblage `dioProvider`/
+    `aiApiClientProvider` dans `app_providers.dart`.
 - **Reste à faire** :
   - OCR on-device (ML Kit) sur la photo du BL.
   - Câblage `AiOperationQueue`/`PendingAIJob` (déclenchement online, mise en
     file offline, traitement différé au retour réseau) - consommateur de
-    `saveCandidateFactSet`, pas encore écrit.
+    `AiApiClient` + `saveCandidateFactSet`, pas encore écrit : c'est la
+    pièce qui reste à assembler pour que la chaîne complète (capture ->
+    IA -> candidat -> revue) fonctionne de bout en bout.
   - Écran de revue réel (`facts_review_screen.dart` est aujourd'hui un stub
     à champs codés en dur, non connecté au pipeline) - consommateur de
     `latestCandidateFactSet`.

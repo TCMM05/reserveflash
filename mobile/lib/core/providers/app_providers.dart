@@ -19,6 +19,7 @@ import 'dart:io';
 // `flutter_test` (voir la mise en garde dans
 // test/data/local_incident_repository_test.dart) car ce fichier n'importe
 // pas `flutter_test`.
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,10 +29,12 @@ import 'package:path_provider/path_provider.dart';
 import '../../data/local/app_database.dart';
 import '../../data/local/evidence_storage.dart';
 import '../../data/local/local_incident_repository.dart';
+import '../../data/remote/ai_api_client.dart';
 import '../../domain/entities/evidence_asset.dart' as domain;
 import '../../domain/entities/incident.dart' as domain;
 import '../../domain/entities/issue.dart' as domain;
 import '../../domain/repositories/incident_repository.dart';
+import '../config/backend_config.dart';
 
 /// Ouvre la base Drift/SQLite réelle de l'app (points 1/2 - "source de
 /// vérité locale") : fichier persistant dans l'espace privé de l'app
@@ -65,6 +68,29 @@ final Provider<AppDatabase> appDatabaseProvider = Provider<AppDatabase>((ref) {
 
 final Provider<EvidenceStorageService> evidenceStorageServiceProvider =
     Provider<EvidenceStorageService>((ref) => const EvidenceStorageService());
+
+/// R2 - unique client HTTP de l'app (voir
+/// `lib/data/remote/ai_api_client.dart` : seul appel réseau optionnel,
+/// jamais requis pour la capture locale, section 8.1). `baseUrl` vient de
+/// `lib/core/config/backend_config.dart` - jamais codé en dur ici.
+final Provider<Dio> dioProvider = Provider<Dio>((ref) {
+  return Dio(
+    BaseOptions(
+      baseUrl: backendBaseUrl,
+      connectTimeout: const Duration(seconds: 30),
+      // Généreux côté réception : une extraction IA (LLM) peut prendre
+      // plusieurs secondes, voir backend/app/config.py::
+      // openai_request_timeout_seconds (30s également côté backend - pas de
+      // sens à couper côté mobile avant que le backend lui-même n'ait
+      // renvoyé AI_UNAVAILABLE).
+      receiveTimeout: const Duration(seconds: 35),
+    ),
+  );
+});
+
+final Provider<AiApiClient> aiApiClientProvider = Provider<AiApiClient>((ref) {
+  return AiApiClient(DioAiHttpTransport(ref.watch(dioProvider)));
+});
 
 /// Point d'entrée UNIQUE pour tout le code applicatif (écrans, use cases) -
 /// voir docstring de `lib/domain/repositories/incident_repository.dart` :

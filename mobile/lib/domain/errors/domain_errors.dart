@@ -59,3 +59,58 @@ final class LiabilityAttributionException extends DomainException {
   /// que l'UI puisse rouvrir précisément ce champ à la reformulation.
   final String fieldName;
 }
+
+/// R2 : levées par `lib/data/remote/ai_api_client.dart` lors d'un appel à
+/// `/v1/ai/transcribe`/`/v1/ai/extract` - miroir mobile de
+/// `backend/app/domain/errors.py::AIUnavailableError`/`AIInvalidOutputError`/
+/// `AIRateLimitedError` (mêmes `code`, pour que le corps d'erreur JSON du
+/// backend - `{"code": ..., "message": ..., "trace_id": ...}`, voir
+/// `backend/app/api/errors.py` - se retraduise directement en exception
+/// typée côté mobile).
+///
+/// Distinction utile pour la file `AiOperationQueue` (traitement online/
+/// offline) : [AiUnavailableException] et [AiRateLimitedException] couvrent
+/// des pannes transitoires (réseau, provider indisponible, quota) où un
+/// nouveau essai plus tard a du sens ; [AiInvalidOutputException] couvre un
+/// échec sémantique du pipeline IA lui-même (sortie non conforme même après
+/// la tentative de réparation contrôlée côté backend) - un nouvel essai
+/// immédiat sur la même entrée a peu de chances de réussir, mais ce fichier
+/// ne décide PAS de politique de retry : il se contente de porter
+/// l'information, la décision reste à la couche qui traite la file (section
+/// "Échec IA" de la demande R2 - "aucune boucle infinie de retries", "ne
+/// jamais bloquer l'utilisateur").
+final class AiUnavailableException extends DomainException {
+  const AiUnavailableException(super.message);
+
+  @override
+  String get code => 'AI_UNAVAILABLE';
+}
+
+final class AiInvalidOutputException extends DomainException {
+  const AiInvalidOutputException(super.message);
+
+  @override
+  String get code => 'AI_INVALID_OUTPUT';
+}
+
+final class AiRateLimitedException extends DomainException {
+  const AiRateLimitedException(super.message);
+
+  @override
+  String get code => 'RATE_LIMITED';
+}
+
+/// Toute autre erreur de requête (validation du payload envoyé, erreur
+/// interne backend, réponse imprévue) - distincte des trois ci-dessus pour
+/// ne jamais masquer un bug côté appelant sous un code "IA indisponible".
+final class AiRequestFailedException extends DomainException {
+  const AiRequestFailedException(super.message, {required this.httpStatusCode});
+
+  @override
+  String get code => 'AI_REQUEST_FAILED';
+
+  /// Code HTTP réel reçu (ou -1 si aucune réponse n'a été reçue mais que ce
+  /// n'est pas non plus un cas réseau couvert par [AiUnavailableException] -
+  /// ex: réponse reçue mais corps illisible).
+  final int httpStatusCode;
+}
