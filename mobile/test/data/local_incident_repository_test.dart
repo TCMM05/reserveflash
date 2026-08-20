@@ -368,7 +368,7 @@ void main() {
           IssueType.missingQty,
         );
 
-        final CandidateFactData extracted = CandidateFactData(
+        const CandidateFactData extracted = CandidateFactData(
           issueTypeCandidate: IssueType.missingQty,
           fields: <String, CandidateField>{
             'expected_quantity': const CandidateField(
@@ -427,7 +427,7 @@ void main() {
           IssueType.packagingDamage,
         );
 
-        final CandidateFactData tainted = CandidateFactData(
+        const CandidateFactData tainted = CandidateFactData(
           issueTypeCandidate: IssueType.packagingDamage,
           fields: <String, CandidateField>{
             'packaging_condition': const CandidateField(
