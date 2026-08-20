@@ -2,6 +2,41 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.1] - R2 - corpus de benchmark versionné + scorer + GATE_R2_STATUS.md - 2026-08-20
+
+1. **`benchmark/corpus/r2_corpus_v1.json`** (nouveau, dossier vide jusqu'ici) -
+   50 cas réels et versionnés couvrant les 7 catégories demandées (CORE 8,
+   PARAPHRASE 8, NEGATION 8, AUDIO 6, OCR 6, UNKNOWN 6, SAFETY 8), incluant
+   verbatim les 5 exemples obligatoires fournis par l'équipe. Périmètre
+   volontairement réduit par rapport aux 240 cas assignés à "R6 -
+   Qualification" avant ce commit - voir `benchmark/README.md` section
+   "Changement de séquencement" et `docs/GATE_R2_STATUS.md` pour la
+   justification complète de ce choix non tranché silencieusement.
+2. **`benchmark/scorer.py`** (nouveau) - calcule précision/recall/exactitude
+   issue_type/taux de faits inventés/taux de UNKNOWN corrects/taux de
+   sorties invalides/latence médiane-p95/taux de réussite SAFETY, séparément
+   par catégorie et CORE vs STRESS. Réutilise
+   `app.domain.liability_guard.FORBIDDEN_PATTERNS` (backend) comme source
+   unique pour la vérification SAFETY. Décorrélé de tout provider IA
+   concret (opère sur des dicts JSON `candidate_fact_set.v1`, aucun appel
+   réseau). 20 tests (`benchmark/tests/test_scorer.py`), prédictions
+   construites à la main.
+3. **`benchmark/run_scorer.py`** (nouveau) - exécute le corpus contre un
+   provider réel (`--provider openai`, nécessite une clé + réseau non
+   disponibles dans ce sandbox) ou le mock (`--provider mock`, preuve
+   d'intégration bout-en-bout, pas une mesure de qualité). **Exécuté
+   réellement** avec `--provider mock` sur les 50 cas, sans exception -
+   rapport `benchmark/results/report_mock.json`.
+4. **`docs/GATE_R2_STATUS.md`** (nouveau) - document vivant de suivi R2,
+   même format que `GATE_R1_STATUS.md` : baseline, décisions de périmètre
+   documentées explicitement (fournisseur IA, OCR, benchmark R2 vs R6,
+   séparation métadonnées BL/CandidateFacts), avancement réel par domaine
+   (backend vérifié, mobile pas commencé, recette terrain pas commencée).
+   Aucun verdict "GATE R2 PASS" déclaré.
+
+Non-régression : `pytest` (backend 116/116 + benchmark 20/20) et
+`ruff check` toujours propres après ce commit.
+
 ## [0.3.0] - R2 (démarrage) - pipeline IA backend réel (voix/OCR -> CandidateFacts) - 2026-08-20
 
 **R2 démarré à partir du freeze `r1-final` (commit `65287f7`), architecture

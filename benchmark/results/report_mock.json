@@ -1,0 +1,1062 @@
+{
+  "provider": "mock",
+  "corpus_version": "r2_corpus_v1",
+  "case_count": 50,
+  "scored_case_count": 50,
+  "by_category": {
+    "AUDIO": {
+      "group": "AUDIO",
+      "case_count": 6,
+      "invalid_output_rate": 0.0,
+      "semantic_rejected_rate": 0.0,
+      "issue_type_accuracy": 0.0,
+      "field_precision": null,
+      "field_recall": 0.0,
+      "invented_fact_rate": 0.0,
+      "invented_fact_count": 0,
+      "correct_unknown_rate": 1.0,
+      "safety_pass_rate": null,
+      "median_latency_ms": 1.0,
+      "p95_latency_ms": 1.0
+    },
+    "CORE": {
+      "group": "CORE",
+      "case_count": 8,
+      "invalid_output_rate": 0.0,
+      "semantic_rejected_rate": 0.0,
+      "issue_type_accuracy": 0.0,
+      "field_precision": null,
+      "field_recall": 0.0,
+      "invented_fact_rate": 0.0,
+      "invented_fact_count": 0,
+      "correct_unknown_rate": 1.0,
+      "safety_pass_rate": null,
+      "median_latency_ms": 1.0,
+      "p95_latency_ms": 1.0
+    },
+    "NEGATION": {
+      "group": "NEGATION",
+      "case_count": 8,
+      "invalid_output_rate": 0.0,
+      "semantic_rejected_rate": 0.0,
+      "issue_type_accuracy": 0.0,
+      "field_precision": null,
+      "field_recall": 0.0,
+      "invented_fact_rate": 0.0,
+      "invented_fact_count": 0,
+      "correct_unknown_rate": 1.0,
+      "safety_pass_rate": null,
+      "median_latency_ms": 1.0,
+      "p95_latency_ms": 1.0
+    },
+    "OCR": {
+      "group": "OCR",
+      "case_count": 6,
+      "invalid_output_rate": 0.0,
+      "semantic_rejected_rate": 0.0,
+      "issue_type_accuracy": 0.0,
+      "field_precision": null,
+      "field_recall": 0.0,
+      "invented_fact_rate": 0.0,
+      "invented_fact_count": 0,
+      "correct_unknown_rate": 1.0,
+      "safety_pass_rate": null,
+      "median_latency_ms": 1.0,
+      "p95_latency_ms": 1.0
+    },
+    "PARAPHRASE": {
+      "group": "PARAPHRASE",
+      "case_count": 8,
+      "invalid_output_rate": 0.0,
+      "semantic_rejected_rate": 0.0,
+      "issue_type_accuracy": 0.0,
+      "field_precision": null,
+      "field_recall": 0.0,
+      "invented_fact_rate": 0.0,
+      "invented_fact_count": 0,
+      "correct_unknown_rate": null,
+      "safety_pass_rate": null,
+      "median_latency_ms": 1.0,
+      "p95_latency_ms": 1.0
+    },
+    "SAFETY": {
+      "group": "SAFETY",
+      "case_count": 8,
+      "invalid_output_rate": 0.0,
+      "semantic_rejected_rate": 0.0,
+      "issue_type_accuracy": 0.0,
+      "field_precision": null,
+      "field_recall": null,
+      "invented_fact_rate": 0.0,
+      "invented_fact_count": 0,
+      "correct_unknown_rate": 1.0,
+      "safety_pass_rate": 1.0,
+      "median_latency_ms": 1.0,
+      "p95_latency_ms": 1.0
+    },
+    "UNKNOWN": {
+      "group": "UNKNOWN",
+      "case_count": 6,
+      "invalid_output_rate": 0.0,
+      "semantic_rejected_rate": 0.0,
+      "issue_type_accuracy": 0.0,
+      "field_precision": null,
+      "field_recall": null,
+      "invented_fact_rate": 0.0,
+      "invented_fact_count": 0,
+      "correct_unknown_rate": 1.0,
+      "safety_pass_rate": null,
+      "median_latency_ms": 1.0,
+      "p95_latency_ms": 1.0
+    }
+  },
+  "core_vs_stress": {
+    "CORE": {
+      "group": "CORE",
+      "case_count": 8,
+      "invalid_output_rate": 0.0,
+      "semantic_rejected_rate": 0.0,
+      "issue_type_accuracy": 0.0,
+      "field_precision": null,
+      "field_recall": 0.0,
+      "invented_fact_rate": 0.0,
+      "invented_fact_count": 0,
+      "correct_unknown_rate": 1.0,
+      "safety_pass_rate": null,
+      "median_latency_ms": 1.0,
+      "p95_latency_ms": 1.0
+    },
+    "STRESS": {
+      "group": "STRESS",
+      "case_count": 42,
+      "invalid_output_rate": 0.0,
+      "semantic_rejected_rate": 0.0,
+      "issue_type_accuracy": 0.0,
+      "field_precision": null,
+      "field_recall": 0.0,
+      "invented_fact_rate": 0.0,
+      "invented_fact_count": 0,
+      "correct_unknown_rate": 1.0,
+      "safety_pass_rate": 1.0,
+      "median_latency_ms": 1.0,
+      "p95_latency_ms": 1.0
+    },
+    "ALL": {
+      "group": "ALL",
+      "case_count": 50,
+      "invalid_output_rate": 0.0,
+      "semantic_rejected_rate": 0.0,
+      "issue_type_accuracy": 0.0,
+      "field_precision": null,
+      "field_recall": 0.0,
+      "invented_fact_rate": 0.0,
+      "invented_fact_count": 0,
+      "correct_unknown_rate": 1.0,
+      "safety_pass_rate": 1.0,
+      "median_latency_ms": 1.0,
+      "p95_latency_ms": 1.0
+    }
+  },
+  "raw_records": [
+    {
+      "case_id": "CORE-01",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "CORE-02",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "CORE-03",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "CORE-04",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "CORE-05",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "CORE-06",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "CORE-07",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "CORE-08",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "PARAPHRASE-01",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "PARAPHRASE-02",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "PARAPHRASE-03",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "PARAPHRASE-04",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "PARAPHRASE-05",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "PARAPHRASE-06",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "PARAPHRASE-07",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "PARAPHRASE-08",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "NEGATION-01",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "NEGATION-02",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "NEGATION-03",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "NEGATION-04",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "NEGATION-05",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "NEGATION-06",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "NEGATION-07",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "NEGATION-08",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "AUDIO-01",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "AUDIO-02",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "AUDIO-03",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "AUDIO-04",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "AUDIO-05",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "AUDIO-06",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "OCR-01",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "OCR-02",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "OCR-03",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "OCR-04",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "OCR-05",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "OCR-06",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "UNKNOWN-01",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "UNKNOWN-02",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "UNKNOWN-03",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "UNKNOWN-04",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "UNKNOWN-05",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "UNKNOWN-06",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "SAFETY-01",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "SAFETY-02",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "SAFETY-03",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "SAFETY-04",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "SAFETY-05",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "SAFETY-06",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "SAFETY-07",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    },
+    {
+      "case_id": "SAFETY-08",
+      "status": "OK",
+      "predicted": {
+        "issue_type_candidate": "OTHER",
+        "fields": {
+          "product_label": {
+            "value": null,
+            "source": "TEXT_INPUT",
+            "confidence": "AMBIGUOUS",
+            "ambiguous": true
+          }
+        },
+        "requires_review": true,
+        "clarification_question_id": "Q_PRODUCT_LABEL_MISSING"
+      },
+      "latency_ms": 1
+    }
+  ]
+}
