@@ -1,27 +1,26 @@
 # Statut Gate R1 - "Capture Offline"
 
-**Statut : CORRECTION VÉRIFIÉE PAR EXÉCUTION RÉELLE (poste utilisateur +
-CI GitHub Actions, run #8 commit `a6d0b34`) ET PAR UN PARCOURS MANUEL SUR
-APPAREIL RÉEL (Samsung Galaxy A51, rapporté par l'utilisateur testeur :
-"tout marche bien !") - IL NE RESTE QUE LE VERDICT DE LA RECETTE
-INDÉPENDANTE AVANT TOUT NOUVEAU TAG `r1-final`.** La recette terrain
-indépendante avait trouvé un défaut réel lors du parcours manuel décrit
-plus bas : les photos et la note vocale capturées n'étaient pas
-consultables/écoutables depuis l'app une fois enregistrées. Voir la
-section "Correction ciblée post-recette terrain (photo/audio)" ci-dessous
-pour le détail complet, y compris plusieurs bugs réels (tests, pas
-fonctionnalité) trouvés et corrigés uniquement grâce à cette exécution
-réelle - exactement la même rigueur que le reste de R1 initial (voir la
-section "Exécution réelle" plus bas). Le tag `r1-candidate` existant
-correspond au commit D'AVANT ce correctif - **ne pas le considérer comme
-à jour.** Le parcours manuel sur appareil, comme pour R1 initial, reste une
-observation rapportée par l'utilisateur testeur, **pas une validation
-formelle** - la recette indépendante précédente (parcours métier/offline)
-**ne couvre PAS encore ce correctif**, confirmé explicitement par
-l'utilisateur, et doit donc se prononcer dessus séparément. Conformément à
-la demande corrective ("ne pas déclarer R1 PASS vous-même : livrer les
-preuves et laisser la recette indépendante décider"), **aucune section de
-ce document n'affirme que le Gate R1 est validé.**
+**Statut : GATE R1 PASS - FREEZE.** La recette indépendante a rendu son
+verdict sur le correctif ciblé "photo/audio" (commit `b7b6fc2`, tag
+`r1-photo-audio-fix-candidate`) : **"La recette indépendante valide le
+correctif photo/audio et prononce GATE R1 PASS"** (retour transmis par
+l'utilisateur le 2026-08-20, verbatim ci-dessus). Ce verdict couvre à la
+fois le parcours métier/offline de R1 initial (déjà validé précédemment)
+et ce correctif photo/audio (dont le verdict précédent ne couvrait pas
+encore). Ce document consigne ce verdict rapporté ; il ne se substitue pas
+à la recette indépendante, qui reste seule décisionnaire - conformément à
+la consigne permanente du projet, **cette déclaration PASS n'est pas
+auto-proclamée : elle reflète le retour explicite de la recette
+indépendante, relayé par l'utilisateur.**
+
+Ce commit constitue le **freeze documentaire R1 final**, préparatoire au
+tag `r1-final`. Consigne explicite reçue avec ce verdict : **"ne modifier
+aucune fonctionnalité"** - ce commit ne touche donc que la documentation
+(ce fichier et `CHANGELOG.md`), aucun fichier `mobile/lib/**` n'est
+modifié. Voir la section "Correction ciblée post-recette terrain
+(photo/audio)" ci-dessous pour le détail complet du correctif validé, et
+"Prochaines étapes" (point 7) pour la suite de la séquence de freeze
+(push, CI, tag `r1-final`, ZIP, APK, `R1_FINAL_SHA256.txt`).
 
 ## Rappel du Gate R1 (critère d'acceptation, verbatim de la demande)
 
@@ -377,15 +376,26 @@ la recette indépendante (voir section suivante).
    à ce document ni à son auteur - ce document se limite à livrer les
    preuves ci-dessus.
 6. ~~Correction ciblée post-recette terrain (visionneuse photo + lecteur
-   audio)~~ **BOOTSTRAP RÉEL + CI + RECETTE MANUELLE SUR APPAREIL FAITS** :
-   `flutter analyze` (0/0), `flutter test` (67/67), `flutter build apk
-   --debug` (réussi) sur le poste de l'utilisateur, CI GitHub Actions verte
-   (run #8, commit `a6d0b34`, 4 jobs, 7m54s), ET parcours manuel sur le
-   Samsung Galaxy A51 confirmé par l'utilisateur testeur ("tout marche
-   bien !") - voir section dédiée ci-dessus pour le détail complet. **Reste
-   à faire avant tout nouveau tag `r1-final`** : soumettre ce correctif à
-   la recette indépendante (dont le verdict PASS précédent ne le couvre
-   pas encore, confirmé explicitement) pour qu'elle rende son verdict.
-   Ce n'est qu'à ce moment que la livraison complète (ZIP, APK, SHA-256,
-   captures d'écran, `CHANGELOG.md`, ce document) et le tag `r1-final`
-   pourront être préparés.
+   audio)~~ **FAIT** : `flutter analyze` (0/0), `flutter test` (67/67),
+   `flutter build apk --debug` (réussi) sur le poste de l'utilisateur, CI
+   GitHub Actions verte (run #8, commit `a6d0b34`, 4 jobs, 7m54s), parcours
+   manuel sur le Samsung Galaxy A51 confirmé par l'utilisateur testeur
+   ("tout marche bien !"), et **verdict PASS rendu par la recette
+   indépendante sur ce correctif précis** (transmis par l'utilisateur le
+   2026-08-20 - voir statut en tête de document) - voir section dédiée
+   ci-dessus pour le détail complet.
+7. **Freeze R1 final (en cours)** - séquence demandée par la recette
+   indépendante suite à son verdict PASS, "ne modifier aucune
+   fonctionnalité" :
+   1. ~~Créer le commit final de freeze R1~~ **FAIT** (ce commit -
+      documentation uniquement, aucun fichier `mobile/lib/**` modifié).
+   2. Pousser ce commit sur `main`.
+   3. Exécuter la CI complète sur ce commit exact.
+   4. Si elle est verte, poser le tag `r1-final` sur ce commit.
+   5. Générer `ReserveFlash_R1_FINAL.zip` directement depuis le tag
+      `r1-final` (`git archive`).
+   6. Fournir l'APK issue de cette même CI (artefact `reserveflash-debug-apk`,
+      pas un rebuild local).
+   7. Fournir `R1_FINAL_SHA256.txt` avec le commit, le tag, le SHA-256 du
+      ZIP, le SHA-256 de l'APK et la référence du run CI.
+   8. R2 ne commence qu'après livraison complète de ce freeze.

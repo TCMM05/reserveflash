@@ -74,10 +74,34 @@ Local-First ou backend, comme demandé) :
    lieu d'un délai fixe unique). Détail complet dans l'historique git de ce
    correctif.
 
-**Reste à faire avant tout nouveau tag** : pousser ce commit et confirmer
+~~**Reste à faire avant tout nouveau tag** : pousser ce commit et confirmer
 la CI GitHub Actions verte dessus, puis nouvelle recette terrain manuelle
 sur appareil ciblée sur ce correctif (la recette indépendante précédente ne
-le couvre pas) - **cette entrée ne déclare PAS ce correctif validé.**
+le couvre pas) - cette entrée ne déclare PAS ce correctif validé.~~ **FAIT** :
+CI GitHub Actions verte (run #10, commit `b7b6fc2`, 4 jobs, 9m47s) et
+parcours manuel sur Samsung Galaxy A51 confirmé ("tout marche bien !") -
+voir `docs/GATE_R1_STATUS.md`. Verdict de la recette indépendante sur ce
+correctif : voir entrée `[0.2.2]` ci-dessous.
+
+## [0.2.2] - Freeze R1 final - GATE R1 PASS - 2026-08-20
+
+**La recette indépendante a validé le correctif photo/audio et prononcé
+GATE R1 PASS.** Verdict transmis par l'utilisateur le 2026-08-20, verbatim :
+"La recette indépendante valide le correctif photo/audio et prononce GATE
+R1 PASS." Ce verdict couvre à la fois le parcours métier/offline de R1
+initial et le correctif ciblé photo/audio (entrée `[0.2.1]` ci-dessus).
+
+Ce commit est le **freeze documentaire R1 final**, conforme à la consigne
+reçue avec ce verdict : **"ne modifier aucune fonctionnalité"**. Seuls
+`docs/GATE_R1_STATUS.md` et `CHANGELOG.md` sont modifiés dans ce commit -
+aucun fichier `mobile/lib/**` n'est touché.
+
+Séquence de freeze restant à exécuter après ce commit (voir
+`docs/GATE_R1_STATUS.md`, "Prochaines étapes", point 7) : push sur `main`,
+CI complète sur ce commit exact, tag `r1-final` si verte, génération de
+`ReserveFlash_R1_FINAL.zip` depuis le tag, APK issue de cette même CI,
+`R1_FINAL_SHA256.txt` (commit, tag, SHA ZIP, SHA APK, run CI). R2 ne
+commence qu'après livraison complète de ce freeze.
 
 ## [0.2.0] - R1 "Capture Offline" (candidate) - 2026-08-19
 
