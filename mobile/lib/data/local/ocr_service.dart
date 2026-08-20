@@ -53,6 +53,14 @@ final class MlKitOcrService implements OcrService {
     try {
       final InputImage inputImage = InputImage.fromFilePath(imagePath);
       final RecognizedText recognizedText = await recognizer.processImage(inputImage);
+      // DEBUG TEMPORAIRE (diagnostic terrain R2, "Non détecté" malgré une
+      // photo lisible par un humain) - confirme si ML Kit lit vraiment du
+      // texte sur les photos prises en émulateur (webcam) ; à retirer une
+      // fois la cause confirmée. Visible dans la console `flutter run`.
+      // ignore: avoid_print
+      print(
+        '[DEBUG OCR] ${recognizedText.text.isEmpty ? "(vide)" : recognizedText.text}',
+      );
       return recognizedText.text;
     } finally {
       await recognizer.close();
