@@ -2,6 +2,48 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.10] - R2 - correctif : mise en file OCR jamais déclenchée dans le parcours nominal - 2026-08-20
+
+Premier test terrain de `[0.3.9]` (OCR) : écran "Vérifiez les faits" affichant
+"Non détecté" sur tous les champs, sans erreur visible. Diagnostic (avant
+toute hypothèse webcam/qualité photo) : bug réel de séquencement, pas un
+problème d'OCR ni de réseau.
+
+**Cause** : `document_capture_screen.dart::_enqueueOcrExtractionBestEffort`
+ne met en file l'extraction OCR+IA que s'il existe déjà au moins une `Issue`
+pour l'incident (un `CandidateFactSet` est toujours rattaché à une anomalie).
+Or dans le parcours NOMINAL, l'ordre des écrans est S06 `documentCapture` ->
+S08 `issueType` -> ... : `Issue` n'est créée qu'à S08, donc au moment de la
+capture du document (S06) `listIssues` renvoie toujours une liste vide.
+L'appel était donc un no-op silencieux systématique dans le cas normal
+(erreur avalée par le `catch` best-effort, comme prévu) - l'opération n'était
+tout simplement jamais créée en base, jamais retentée par
+`facts_review_screen.dart` (qui ne fait que rejouer les items déjà en file,
+n'en crée aucun).
+
+**Correctif** : la mise en file réelle est déplacée dans
+`issue_type_screen.dart::_continue()`, juste après la création (ou la
+confirmation) du premier type de problème - à ce moment, une `Issue` existe
+forcément. Le code recherche la preuve `EvidenceAsset` de type bon de
+livraison de l'incident et met en file `extractFromDocument` pour elle.
+L'appel resté dans `document_capture_screen.dart` est conservé tel quel (utile
+pour "Reprendre la photo" sur un dossier qui a déjà une anomalie, ex. depuis
+`incident_detail_screen.dart`) : `enqueueAiOperation` étant idempotent par
+clé, les deux points d'appel ne créent jamais de doublon ni de double coût
+IA.
+
+Fichiers modifiés : `mobile/lib/features/issue_type/presentation/issue_type_screen.dart`
+(nouvelle méthode `_enqueueOcrExtractionBestEffort`, appelée depuis
+`_continue()`), `mobile/lib/features/document_capture/presentation/document_capture_screen.dart`
+(docstrings corrigées uniquement, aucun changement de comportement).
+
+Aucun test automatisé nouveau dans ce lot (le bug était dans le câblage
+écran, hors du périmètre couvert par `ai_queue_processor_test.dart`, qui
+teste le processeur en isolation et n'a jamais été affecté). À valider par un
+nouveau test terrain : nouvelle photo de document (nouveau `sourceHash`,
+l'ancien item resterait sinon bloqué au même titre que les incidents connus
+de disjoncteur de retry documentés en `[0.3.8]`).
+
 ## [0.3.9] - R2 - OCR on-device (ML Kit) sur le bon de livraison (mobile) - 2026-08-20
 
 Sixième lot mobile de R2. Jusqu'ici, `document_capture_screen.dart` (S06) ne

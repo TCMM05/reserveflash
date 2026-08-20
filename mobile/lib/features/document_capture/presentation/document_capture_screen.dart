@@ -21,12 +21,15 @@ import 'package:reserveflash/features/common/presentation/missing_incident_view.
 /// `EvidenceAsset` complète (id, incident associé, type document de
 /// livraison, date/heure, chemin local, taille, SHA-256) est écrite AVANT
 /// toute opération réseau/IA (points 4/8/9) - aucun OCR/IA obligatoire ici
-/// (point 2, capture 100% hors ligne, R1-T10). R2 (lot OCR) : une fois la
-/// photo écrite sur disque, une extraction OCR+IA est mise en file au
-/// mieux-effort (voir `_enqueueOcrExtractionBestEffort` ci-dessous) - même
-/// philosophie que `voice_description_screen.dart` : l'échec de cette
-/// étape optionnelle ne doit jamais donner l'impression que la photo
-/// elle-même a été perdue, ni bloquer la suite du parcours.
+/// (point 2, capture 100% hors ligne, R1-T10). R2 (lot OCR, correctif) : une
+/// tentative de mise en file de l'extraction OCR+IA a lieu ici au
+/// mieux-effort (voir `_enqueueOcrExtractionBestEffort` ci-dessous), mais
+/// dans le parcours nominal (S06 -> S08 issueType) elle est un no-op
+/// silencieux, faute d'`Issue` encore créée à ce stade - la mise en file
+/// réelle a lieu à S08, voir `issue_type_screen.dart`. Même philosophie que
+/// `voice_description_screen.dart` en tout état de cause : l'échec (ou
+/// l'absence) de cette étape optionnelle ne doit jamais donner l'impression
+/// que la photo elle-même a été perdue, ni bloquer la suite du parcours.
 class DocumentCaptureScreen extends ConsumerStatefulWidget {
   const DocumentCaptureScreen({required this.incidentId, super.key});
 
@@ -80,16 +83,23 @@ class _DocumentCaptureScreenState extends ConsumerState<DocumentCaptureScreen> {
     }
   }
 
-  /// R2 (lot OCR) : déclenche l'extraction OCR+IA du document qui vient
-  /// d'être capturé, au mieux-effort - jamais un blocage de l'utilisateur,
-  /// jamais une erreur affichée ici (voir docstring de fichier). Même
-  /// limitation V1 documentée que `voice_description_screen.dart` :
-  /// rattache l'opération à la première anomalie (`Issue`) de l'incident (un
-  /// `CandidateFactSet` est toujours rattaché à une anomalie, jamais à
-  /// l'incident entier) - si aucune anomalie n'existe encore (S06 atteint
-  /// hors du parcours nominal, qui passe normalement par S08 après S06),
-  /// aucune opération n'est mise en file : rien n'est perdu (la photo reste
-  /// consultable), juste aucune extraction IA automatique.
+  /// R2 (lot OCR, correctif) : déclenche l'extraction OCR+IA du document qui
+  /// vient d'être capturé, au mieux-effort - jamais un blocage de
+  /// l'utilisateur, jamais une erreur affichée ici (voir docstring de
+  /// fichier). Un `CandidateFactSet` est toujours rattaché à une anomalie
+  /// (`Issue`), jamais à l'incident entier - or dans le parcours NOMINAL (S06
+  /// documentCapture -> S08 issueType -> ...), aucune `Issue` n'existe encore
+  /// à ce stade (elle n'est créée qu'à S08) : cet appel-ci est donc un no-op
+  /// silencieux dans le cas normal, volontairement laissé pour le seul cas
+  /// où cet écran est atteint avec une anomalie déjà existante (ex :
+  /// "Reprendre la photo" depuis `incident_detail_screen.dart` sur un
+  /// dossier déjà avancé). **La mise en file réelle, pour le parcours
+  /// nominal, a lieu dans
+  /// `issue_type_screen.dart::_enqueueOcrExtractionBestEffort`**, juste
+  /// après la création de la première `Issue` - voir la docstring de ce
+  /// fichier pour l'explication complète. `enqueueAiOperation` étant
+  /// idempotent par clé, les deux points d'appel ne créent jamais de
+  /// doublon.
   Future<void> _enqueueOcrExtractionBestEffort(domain.EvidenceAsset asset) async {
     try {
       final List<domain.Issue> issues =
