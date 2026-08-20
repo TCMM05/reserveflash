@@ -3,12 +3,15 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../domain/candidate_guard.dart';
 import '../../domain/entities/ai_queue_item.dart';
+import '../../domain/entities/candidate_fact_set.dart' as domain;
 import '../../domain/entities/confirmed_fact_set.dart' as domain;
 import '../../domain/entities/evidence_asset.dart' as domain;
 import '../../domain/entities/incident.dart' as domain;
 import '../../domain/entities/issue.dart' as domain;
 import '../../domain/entities/reserve_text.dart' as domain;
+import '../../domain/fact_set/candidate_fact_data.dart';
 import '../../domain/fact_set/confirmed_fact_data.dart';
 import '../../domain/liability_guard.dart';
 import '../../domain/repositories/incident_repository.dart';
@@ -232,6 +235,74 @@ final class LocalIncidentRepository implements IncidentRepository {
               status: row.status,
             ))
         .toList();
+  }
+
+  // -- Faits candidats (IA, en attente de revue - R2) ---------------------
+
+  @override
+  Future<domain.CandidateFactSet> saveCandidateFactSet({
+    required String issueId,
+    required CandidateFactData data,
+    String? promptVersion,
+    String? model,
+  }) async {
+    // R2 (défense en profondeur, même principe que confirmFacts/
+    // liability_guard.dart ci-dessous) : filtre AVANT toute persistance,
+    // jamais après - un champ contenant un contenu interdit ou une quantité
+    // négative ne doit jamais exister, même transitoirement, dans
+    // LocalCandidateFactSets. Ne lève jamais (contrairement à
+    // screenConfirmedFact) : voir docstring de candidate_guard.dart.
+    final CandidateFactData screened = screenCandidateFactData(data);
+
+    final String id = _uuid.v4();
+    final DateTime now = DateTime.now().toUtc();
+    const String schemaVersion = candidateFactSetSchemaVersion;
+
+    await _db.into(_db.localCandidateFactSets).insert(
+          LocalCandidateFactSetsCompanion.insert(
+            id: id,
+            issueId: issueId,
+            schemaVersion: schemaVersion,
+            rawStructuredJson: jsonEncode(screened.toJson()),
+            createdAt: now,
+            promptVersion: Value<String?>(promptVersion),
+            model: Value<String?>(model),
+          ),
+        );
+
+    return domain.CandidateFactSet(
+      id: id,
+      issueId: issueId,
+      schemaVersion: schemaVersion,
+      candidateData: screened,
+      createdAt: now,
+      promptVersion: promptVersion,
+      model: model,
+    );
+  }
+
+  @override
+  Future<domain.CandidateFactSet?> latestCandidateFactSet(String issueId) async {
+    final LocalCandidateFactSet? row = await (_db.select(_db.localCandidateFactSets)
+          ..where((t) => t.issueId.equals(issueId))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(1))
+        .getSingleOrNull();
+    return row == null ? null : _toDomainCandidateFactSet(row);
+  }
+
+  domain.CandidateFactSet _toDomainCandidateFactSet(LocalCandidateFactSet row) {
+    final Map<String, dynamic> payload =
+        jsonDecode(row.rawStructuredJson) as Map<String, dynamic>;
+    return domain.CandidateFactSet(
+      id: row.id,
+      issueId: row.issueId,
+      schemaVersion: row.schemaVersion,
+      candidateData: CandidateFactData.fromJson(payload),
+      createdAt: row.createdAt,
+      promptVersion: row.promptVersion,
+      model: row.model,
+    );
   }
 
   // -- Faits confirmés --------------------------------------------------

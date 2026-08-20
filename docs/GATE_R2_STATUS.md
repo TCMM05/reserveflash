@@ -101,18 +101,37 @@ corrigée.
   Un run `--provider openai` avec une vraie clé, produisant des métriques de
   qualité réelles, reste à faire (poste utilisateur).
 
-### Mobile - PAS COMMENCÉ
+### Mobile - EN COURS (persistance CandidateFacts posée, reste tout le câblage)
 
-- OCR on-device (ML Kit) sur la photo du BL.
-- Entité Dart `CandidateFactSet` (absente malgré les tables Drift déjà
-  prêtes - `LocalCandidateFactSets`, `LocalConfirmedFactSets`,
-  `AiOperationQueue`).
-- Câblage `AiOperationQueue`/`PendingAIJob` (déclenchement online, mise en
-  file offline, traitement différé au retour réseau).
-- Écran de revue réel (`facts_review_screen.dart` est aujourd'hui un stub à
-  champs codés en dur, non connecté au pipeline).
-- `document_metadata_screen.dart` (S07, métadonnées BL - voir décision 4
-  ci-dessus).
+- **Fait, non vérifié par exécution** (aucun SDK Flutter/Dart dans ce
+  sandbox - voir `mobile/README.md` ; à valider par `flutter analyze`/
+  `flutter test` côté utilisateur, comme pour tout le code Dart de ce
+  projet) :
+  - `app/domain/fact_set/candidate_fact_data.dart` : miroir Dart de
+    `CandidateFactData`/`CandidateField` (`schemas/candidate_fact_set.v1.schema.json`).
+  - `app/domain/entities/candidate_fact_set.dart` : entité `CandidateFactSet`.
+  - `app/domain/candidate_guard.dart` : miroir Dart de
+    `backend/app/domain/candidate_guard.py` (`screenCandidateFactData`),
+    réutilise les motifs de `liability_guard.dart` (désormais publics,
+    même renommage que le backend R2).
+  - `app/domain/clarification_questions.dart` : miroir Dart du catalogue
+    contrôlé backend.
+  - `IncidentRepository`/`LocalIncidentRepository` : nouvelles méthodes
+    `saveCandidateFactSet`/`latestCandidateFactSet` (table
+    `LocalCandidateFactSets`, déjà migrée mais jusqu'ici jamais utilisée
+    par aucun repository) ; `saveCandidateFactSet` applique
+    `screenCandidateFactData` avant toute écriture, même principe que
+    `confirmFacts`/`liability_guard.dart`.
+- **Reste à faire** :
+  - OCR on-device (ML Kit) sur la photo du BL.
+  - Câblage `AiOperationQueue`/`PendingAIJob` (déclenchement online, mise en
+    file offline, traitement différé au retour réseau) - consommateur de
+    `saveCandidateFactSet`, pas encore écrit.
+  - Écran de revue réel (`facts_review_screen.dart` est aujourd'hui un stub
+    à champs codés en dur, non connecté au pipeline) - consommateur de
+    `latestCandidateFactSet`.
+  - `document_metadata_screen.dart` (S07, métadonnées BL - voir décision 4
+    ci-dessus).
 
 ### Recette terrain - PAS COMMENCÉE
 

@@ -34,8 +34,8 @@ const List<String> liabilityGuardFreeTextFields = <String>[
   'productReference',
 ];
 
-class _ForbiddenPattern {
-  const _ForbiddenPattern(this.violationCode, this.pattern);
+class ForbiddenPattern {
+  const ForbiddenPattern(this.violationCode, this.pattern);
   final String violationCode;
   final RegExp pattern;
 }
@@ -67,8 +67,14 @@ class _ForbiddenPattern {
 // bien Unicode-aware des lors que `unicode: true` est actif (c'est là son
 // vrai role). `(?<![\p{L}\p{N}_])` = pas précédé d'un caractère de mot
 // Unicode ; `(?![\p{L}\p{N}_])` = pas suivi d'un caractère de mot Unicode.
-final List<_ForbiddenPattern> _forbiddenPatterns = <_ForbiddenPattern>[
-  _ForbiddenPattern(
+// R2 : rendu public (était `_forbiddenPatterns`) pour être réutilisé par
+// `lib/domain/candidate_guard.dart` - même principe que le backend, où
+// `app/domain/liability_guard.py::_FORBIDDEN_PATTERNS` a été renommé
+// `FORBIDDEN_PATTERNS` pour la même raison (source unique de vérité sur "ce
+// qu'est un contenu interdit", partagée entre le filtrage post-confirmation
+// et le filtrage pré-revue des candidats IA).
+final List<ForbiddenPattern> forbiddenPatterns = <ForbiddenPattern>[
+  ForbiddenPattern(
     'LIABILITY_ATTRIBUTION',
     RegExp(
       r'(?<![\p{L}\p{N}_])(responsab(le|ilité)s?|fautifs?|faute|'
@@ -80,7 +86,7 @@ final List<_ForbiddenPattern> _forbiddenPatterns = <_ForbiddenPattern>[
       unicode: true,
     ),
   ),
-  _ForbiddenPattern(
+  ForbiddenPattern(
     'INDEMNIFICATION_PROMISE',
     RegExp(
       // R0.2 (hotfix decouvert par execution reelle, troisieme vague) :
@@ -104,7 +110,7 @@ final List<_ForbiddenPattern> _forbiddenPatterns = <_ForbiddenPattern>[
       unicode: true,
     ),
   ),
-  _ForbiddenPattern(
+  ForbiddenPattern(
     'LEGAL_CONCLUSION',
     RegExp(
       r'(?<![\p{L}\p{N}_])(manquement\s+contractuel|inexécution\s+contractuelle|'
@@ -114,7 +120,7 @@ final List<_ForbiddenPattern> _forbiddenPatterns = <_ForbiddenPattern>[
       unicode: true,
     ),
   ),
-  _ForbiddenPattern(
+  ForbiddenPattern(
     'INVENTED_AMOUNT',
     RegExp(
       r'(\d+[.,]?\d*\s?(€|eur\b|euros?)|montant\s+de\s+\d)',
@@ -122,7 +128,7 @@ final List<_ForbiddenPattern> _forbiddenPatterns = <_ForbiddenPattern>[
       unicode: true,
     ),
   ),
-  _ForbiddenPattern(
+  ForbiddenPattern(
     'LEGAL_QUALIFICATION',
     RegExp(
       r'(?<![\p{L}\p{N}_])(délit|infraction|faute\s+lourde|force\s+majeure|'
@@ -158,7 +164,7 @@ void screenConfirmedFact(ConfirmedFactData fact) {
     if (value == null || value.isEmpty) {
       continue;
     }
-    for (final _ForbiddenPattern forbidden in _forbiddenPatterns) {
+    for (final ForbiddenPattern forbidden in forbiddenPatterns) {
       final RegExpMatch? match = forbidden.pattern.firstMatch(value);
       if (match != null) {
         throw LiabilityAttributionException(

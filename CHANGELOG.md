@@ -2,6 +2,79 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.2] - R2 - CandidateFactSet côté mobile (entité + garde-fous + repository) - 2026-08-20
+
+Premier lot mobile de R2 (voir `docs/GATE_R2_STATUS.md`, section "Mobile" -
+jusqu'ici "PAS COMMENCÉ"). Portée volontairement limitée à la persistance
+locale des candidats IA - l'OCR on-device, le câblage `AiOperationQueue` et
+l'écran de revue réel restent à faire (voir "Reste à faire" ci-dessous).
+
+**Non vérifié par exécution dans ce sandbox** (contrairement au travail
+backend de `[0.3.0]`/`[0.3.1]`, testé via `pytest` réel) : ce sandbox ne
+dispose d'aucun SDK Flutter/Dart (voir `mobile/README.md`). Ce lot a été
+écrit par calque strict sur les fichiers Dart existants déjà validés côté
+utilisateur (mêmes conventions d'import, de nommage, de sérialisation JSON,
+de structure de fichier - y compris la contrainte `library;` avant tout
+`import`/`part`, réapprise à la dure lors du hotfix R0.2 documenté dans
+`app_database.dart`). Reste à exécuter côté utilisateur : `flutter pub get`,
+`flutter analyze`, puis les tests une fois écrits.
+
+1. **`mobile/lib/domain/fact_set/candidate_fact_data.dart`** (nouveau) -
+   miroir Dart de `schemas/candidate_fact_set.v1.schema.json` /
+   `backend/app/domain/fact_set.py::CandidateField`/`CandidateFactData`
+   (classes `CandidateField`, `CandidateFactData`, sérialisation
+   `fromJson`/`toJson`, `copyWith`). Clés du `Map fields` en snake_case
+   (wire JSON), pas camelCase, pour un round-trip JSON fidèle et un
+   alignement direct avec `clarification_questions.dart`.
+2. **`mobile/lib/domain/entities/candidate_fact_set.dart`** (nouveau) -
+   entité `CandidateFactSet` (pendant candidat de `ConfirmedFactSet`),
+   miroir mobile de `backend/app/domain/entities.py`.
+3. **`mobile/lib/domain/liability_guard.dart`** - `_ForbiddenPattern`/
+   `_forbiddenPatterns` rendus publics (`ForbiddenPattern`/
+   `forbiddenPatterns`), même renommage que le backend
+   (`_FORBIDDEN_PATTERNS` -> `FORBIDDEN_PATTERNS`, voir `[0.3.0]`) : source
+   unique de vérité réutilisée par le nouveau `candidate_guard.dart`.
+   Comportement inchangé.
+4. **`mobile/lib/domain/candidate_guard.dart`** (nouveau) - miroir Dart de
+   `backend/app/domain/candidate_guard.py` : `screenCandidateFactData`
+   retire silencieusement (jamais de mutation en place, jamais
+   d'exception) tout champ candidat contenant un motif interdit ou une
+   quantité négative, force `requiresReview = true` si un champ a été
+   retiré.
+5. **`mobile/lib/domain/clarification_questions.dart`** (nouveau) - miroir
+   Dart de `backend/app/domain/clarification_questions.py` : catalogue
+   contrôlé `clarificationQuestionCatalog` + `clarificationQuestionIdForField`
+   (nom de champ hors catalogue -> `null`, jamais un identifiant inventé).
+6. **`mobile/lib/domain/repositories/incident_repository.dart`** - ajout de
+   `saveCandidateFactSet`/`latestCandidateFactSet` à l'interface
+   `IncidentRepository` (absents jusqu'ici malgré la table Drift
+   `LocalCandidateFactSets` déjà migrée - lacune confirmée par lecture
+   complète du fichier avant ce commit).
+7. **`mobile/lib/data/local/local_incident_repository.dart`** -
+   implémentation Drift des deux méthodes ci-dessus. `saveCandidateFactSet`
+   applique `screenCandidateFactData` AVANT toute écriture (même principe
+   que `confirmFacts`/`liability_guard.dart` : point d'entrée unique de
+   persistance, défense en profondeur).
+8. **Tests écrits (non exécutés, même statut que `test/data/
+   local_incident_repository_test.dart` existant avant ce commit - voir
+   `mobile/README.md`, section "Limitation connue de cet environnement")** :
+   `mobile/test/domain/candidate_guard_test.dart` (miroir de
+   `backend/tests/domain/test_candidate_guard.py`, rejoue l'exemple
+   "transporteur responsable" et les cas de quantité négative),
+   `mobile/test/domain/clarification_questions_test.dart` (miroir de
+   `backend/tests/domain/test_clarification_questions.py`), et une nouvelle
+   `group` ajoutée à `test/data/local_incident_repository_test.dart`
+   (persistance réelle disque de `saveCandidateFactSet`/
+   `latestCandidateFactSet`, y compris la preuve que le champ interdit
+   n'atteint jamais `rawStructuredJson` sur disque).
+
+**Reste à faire (R2, mobile)** : OCR on-device (ML Kit) sur la photo du BL,
+câblage `AiOperationQueue`/`PendingAIJob` (déclenchement online, file
+offline, rejeu au retour réseau) consommant ces nouvelles méthodes, écran de
+revue réel `facts_review_screen.dart` (aujourd'hui un stub à champs codés en
+dur) branché sur `latestCandidateFactSet`/confirmation vers
+`ConfirmedFactSet`.
+
 ## [0.3.1] - R2 - corpus de benchmark versionné + scorer + GATE_R2_STATUS.md - 2026-08-20
 
 1. **`benchmark/corpus/r2_corpus_v1.json`** (nouveau, dossier vide jusqu'ici) -

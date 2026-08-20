@@ -22,11 +22,13 @@
 library;
 
 import '../entities/ai_queue_item.dart';
+import '../entities/candidate_fact_set.dart';
 import '../entities/confirmed_fact_set.dart';
 import '../entities/evidence_asset.dart';
 import '../entities/incident.dart';
 import '../entities/issue.dart';
 import '../entities/reserve_text.dart';
+import '../fact_set/candidate_fact_data.dart';
 import '../fact_set/confirmed_fact_data.dart';
 import '../value_objects/incident_status.dart';
 import '../value_objects/issue_type.dart';
@@ -89,6 +91,36 @@ abstract interface class IncidentRepository {
   Future<Issue> addIssue(String incidentId, IssueType issueType);
 
   Future<List<Issue>> listIssues(String incidentId);
+
+  // -- Faits candidats (IA, en attente de revue - F08/F09, R2) -----------
+
+  /// Persiste une nouvelle extraction candidate pour [issueId] (résultat du
+  /// pipeline IA, une fois `AiQueueItem.resultJson` reçu - voir la file
+  /// `enqueueAiOperation`/`markAiOperationSucceeded` ci-dessous).
+  ///
+  /// DOIT appliquer `lib/domain/candidate_guard.dart::screenCandidateFactData`
+  /// avant toute persistance (même principe que `confirmFacts`/
+  /// `liability_guard.dart` plus bas - "point d'entrée unique", défense en
+  /// profondeur R2) : un champ contenant un contenu interdit ou une
+  /// quantité négative ne doit jamais atteindre l'écran de revue, même via
+  /// un chemin d'appel qui aurait oublié de filtrer en amont. Ne lève
+  /// jamais d'exception pour ce filtrage (contrairement à `confirmFacts`) :
+  /// un candidat dégrade proprement (champ retiré, `requiresReview` forcé),
+  /// il ne bloque jamais l'utilisateur (section "Échec IA" de la demande
+  /// R2).
+  Future<CandidateFactSet> saveCandidateFactSet({
+    required String issueId,
+    required CandidateFactData data,
+    String? promptVersion,
+    String? model,
+  });
+
+  /// Dernière extraction candidate reçue pour [issueId] (`null` si aucune
+  /// extraction n'a encore été effectuée/reçue). Une nouvelle extraction
+  /// (ex: nouvelle photo, nouvel enregistrement) crée une nouvelle ligne
+  /// plutôt que de muter la précédente (traçabilité - section 7.2), donc
+  /// "la plus récente" est déterminée par `createdAt`.
+  Future<CandidateFactSet?> latestCandidateFactSet(String issueId);
 
   // -- Faits confirmés --------------------------------------------------
 

@@ -44,13 +44,16 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:reserveflash/data/local/app_database.dart';
 import 'package:reserveflash/data/local/local_incident_repository.dart';
+import 'package:reserveflash/domain/entities/candidate_fact_set.dart' as domain;
 import 'package:reserveflash/domain/entities/confirmed_fact_set.dart' as domain;
 import 'package:reserveflash/domain/entities/evidence_asset.dart' as domain;
 import 'package:reserveflash/domain/entities/incident.dart' as domain;
 import 'package:reserveflash/domain/entities/issue.dart' as domain;
 import 'package:reserveflash/domain/errors/domain_errors.dart';
 import 'package:reserveflash/domain/entities/ai_queue_item.dart';
+import 'package:reserveflash/domain/fact_set/candidate_fact_data.dart';
 import 'package:reserveflash/domain/fact_set/confirmed_fact_data.dart';
+import 'package:reserveflash/domain/value_objects/confidence_level.dart';
 import 'package:reserveflash/domain/value_objects/incident_status.dart';
 import 'package:reserveflash/domain/value_objects/issue_type.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -347,5 +350,139 @@ void main() {
         await secondOpen.close();
       },
     );
+  });
+
+  group('LocalIncidentRepository - CandidateFactSet (R2, persistance + garde-fou)', () {
+    test(
+      'sauvegarder une extraction candidate, fermer/rouvrir, retrouver la '
+      'plus récente avec les mêmes valeurs',
+      () async {
+        final AppDatabase firstOpen = _openFileBackedDatabase(dbFile);
+        final LocalIncidentRepository firstRepository = LocalIncidentRepository(firstOpen);
+
+        final domain.Incident incident = await firstRepository.createIncident(
+          occurredAt: DateTime.utc(2026, 8, 20, 9),
+        );
+        final domain.Issue issue = await firstRepository.addIssue(
+          incident.id,
+          IssueType.missingQty,
+        );
+
+        final CandidateFactData extracted = CandidateFactData(
+          issueTypeCandidate: IssueType.missingQty,
+          fields: <String, CandidateField>{
+            'expected_quantity': const CandidateField(
+              value: 5,
+              source: FactSource.voiceTranscript,
+              confidence: ConfidenceLevel.high,
+            ),
+            'received_quantity': const CandidateField(
+              value: 4,
+              source: FactSource.voiceTranscript,
+              confidence: ConfidenceLevel.high,
+            ),
+          },
+          requiresReview: false,
+        );
+
+        final domain.CandidateFactSet saved = await firstRepository.saveCandidateFactSet(
+          issueId: issue.id,
+          data: extracted,
+          promptVersion: 'extraction_fr_v1',
+          model: 'gpt-4o-mini',
+        );
+
+        await firstOpen.close();
+
+        final AppDatabase secondOpen = _openFileBackedDatabase(dbFile);
+        final LocalIncidentRepository secondRepository = LocalIncidentRepository(secondOpen);
+
+        final domain.CandidateFactSet? reopened =
+            await secondRepository.latestCandidateFactSet(issue.id);
+        expect(reopened, isNotNull);
+        expect(reopened!.id, equals(saved.id));
+        expect(reopened.promptVersion, equals('extraction_fr_v1'));
+        expect(reopened.model, equals('gpt-4o-mini'));
+        expect(reopened.candidateData.issueTypeCandidate, equals(IssueType.missingQty));
+        expect(reopened.candidateData.fields['expected_quantity']!.value, equals(5));
+        expect(reopened.candidateData.fields['received_quantity']!.value, equals(4));
+
+        await secondOpen.close();
+      },
+    );
+
+    test(
+      'un champ candidat contenant un contenu interdit (exemple cité par '
+      "l'équipe : packaging_condition = \"transporteur responsable\") est "
+      'retiré AVANT persistance, jamais écrit tel quel sur disque',
+      () async {
+        final AppDatabase firstOpen = _openFileBackedDatabase(dbFile);
+        final LocalIncidentRepository firstRepository = LocalIncidentRepository(firstOpen);
+
+        final domain.Incident incident = await firstRepository.createIncident(
+          occurredAt: DateTime.utc(2026, 8, 20, 10),
+        );
+        final domain.Issue issue = await firstRepository.addIssue(
+          incident.id,
+          IssueType.packagingDamage,
+        );
+
+        final CandidateFactData tainted = CandidateFactData(
+          issueTypeCandidate: IssueType.packagingDamage,
+          fields: <String, CandidateField>{
+            'packaging_condition': const CandidateField(
+              value: 'transporteur responsable',
+              source: FactSource.voiceTranscript,
+              confidence: ConfidenceLevel.high,
+            ),
+            'product_label': const CandidateField(
+              value: 'PAC-284',
+              source: FactSource.ocr,
+              confidence: ConfidenceLevel.high,
+            ),
+          },
+          requiresReview: false,
+        );
+
+        final domain.CandidateFactSet saved = await firstRepository.saveCandidateFactSet(
+          issueId: issue.id,
+          data: tainted,
+        );
+
+        // Filtré dès la valeur de retour, avant toute question de disque.
+        expect(saved.candidateData.fields.containsKey('packaging_condition'), isFalse);
+        expect(saved.candidateData.fields.containsKey('product_label'), isTrue);
+        expect(saved.candidateData.requiresReview, isTrue);
+
+        await firstOpen.close();
+
+        final AppDatabase secondOpen = _openFileBackedDatabase(dbFile);
+        final LocalIncidentRepository secondRepository = LocalIncidentRepository(secondOpen);
+
+        // Preuve par disque : même après fermeture/réouverture, le champ
+        // interdit n'a jamais existé dans rawStructuredJson.
+        final domain.CandidateFactSet? reopened =
+            await secondRepository.latestCandidateFactSet(issue.id);
+        expect(reopened, isNotNull);
+        expect(reopened!.candidateData.fields.containsKey('packaging_condition'), isFalse);
+        expect(reopened.candidateData.requiresReview, isTrue);
+
+        await secondOpen.close();
+      },
+    );
+
+    test('sans extraction candidate, latestCandidateFactSet retourne null', () async {
+      final AppDatabase open = _openFileBackedDatabase(dbFile);
+      final LocalIncidentRepository repository = LocalIncidentRepository(open);
+      final domain.Incident incident = await repository.createIncident(
+        occurredAt: DateTime.utc(2026, 8, 20, 11),
+      );
+      final domain.Issue issue = await repository.addIssue(incident.id, IssueType.other);
+
+      final domain.CandidateFactSet? none = await repository.latestCandidateFactSet(issue.id);
+      expect(none, isNull);
+
+      await open.close();
+    });
   });
 }
