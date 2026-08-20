@@ -682,7 +682,20 @@ class _FactCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                Text(field.label, style: RfTypography.sectionTitle),
+                // Expanded (bug réel révélé par CI - RenderFlex overflow) :
+                // certains libellés V1 (ex. "Localisation sur le produit")
+                // combinés à un badge d'état plus large ("Compris par l'IA")
+                // dépassent la largeur disponible sans ça - contrairement au
+                // stub d'origine, qui n'avait que 3 libellés courts et ne
+                // révélait jamais ce cas.
+                Expanded(
+                  child: Text(
+                    field.label,
+                    style: RfTypography.sectionTitle,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: RfSpacing.xs),
                 _StatusBadge(state: field.state),
               ],
             ),

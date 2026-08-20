@@ -48,6 +48,22 @@ AppDatabase _openFileBackedDatabase(File dbFile) {
   return AppDatabase(NativeDatabase(dbFile, logStatements: false));
 }
 
+/// Bug de test réel révélé par CI (pas une hypothèse) : le viewport par
+/// défaut de `flutter test` (800x600 logique) est plus petit que le
+/// contenu réel d'une section d'anomalie à 8 champs (chaque `_FactCard`
+/// mesure ~160px de haut, header + bouton compris -> ~1300-1500px au
+/// total). `tester.tap()` ne scrolle jamais automatiquement : taper un
+/// bouton situé hors du viewport initial produit un "would not hit test on
+/// the specified widget" (constaté en CI, pas une simple hypothèse). Agrandir
+/// le viewport pour la durée du test (plutôt que scroller entre chaque tap)
+/// est plus robuste : tout le contenu tient dans une seule "photo", aucune
+/// dépendance à l'ordre/l'index des taps vis-à-vis du scroll.
+void _useTallViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(800, 2600);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+}
+
 Future<void> _cleanupTempDir(Directory dir) async {
   if (!await dir.exists()) {
     return;
@@ -98,6 +114,7 @@ void main() {
       'affiche les champs candidats reçus, "Non détecté" pour les champs '
       'absents, et désactive la confirmation tant que tout n\'est pas résolu',
       (WidgetTester tester) async {
+        _useTallViewport(tester);
         final domain.Incident incident = await repository.createIncident(
           occurredAt: DateTime.utc(2026, 8, 20, 9),
         );
@@ -159,6 +176,7 @@ void main() {
       'entièrement confirmable manuellement : marquer tous les champs comme '
       "inconnus persiste réellement un ConfirmedFactSet via confirmFacts",
       (WidgetTester tester) async {
+        _useTallViewport(tester);
         final domain.Incident incident = await repository.createIncident(
           occurredAt: DateTime.utc(2026, 8, 20, 10),
         );
@@ -222,6 +240,7 @@ void main() {
       'persiste EXACTEMENT les valeurs proposées par l\'IA, sans champ '
       'inconnu',
       (WidgetTester tester) async {
+        _useTallViewport(tester);
         final domain.Incident incident = await repository.createIncident(
           occurredAt: DateTime.utc(2026, 8, 20, 11),
         );
