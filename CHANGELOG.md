@@ -2,6 +2,63 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.4] - R2 - câblage AiOperationQueue (mobile) - 2026-08-20
+
+Troisième lot mobile de R2 : la pièce qui relie enfin `AiApiClient`
+(`[0.3.3]`) et `saveCandidateFactSet` (`[0.3.2]`) - jusqu'ici posés mais
+jamais appelés l'un après l'autre. Un seul point de déclenchement est câblé
+à ce stade (note vocale, voir "Reste à faire" pour l'OCR/photo).
+
+1. **`mobile/lib/data/local/evidence_storage.dart`** - nouvelle méthode
+   `readBytes(EvidenceAsset)` : relit les octets bruts d'une preuve déjà
+   capturée (nécessaire pour transmettre un audio à
+   `AiApiClient.transcribe`), en conservant la frontière stricte de ce
+   fichier (seule partie de l'app qui lit/écrit des octets pour les
+   preuves). Contrairement à `verify()`, lève une exception explicite si le
+   fichier est absent - un appelant qui a besoin du CONTENU d'une preuve
+   doit être informé immédiatement, jamais recevoir un résultat vide
+   silencieux.
+2. **`mobile/lib/data/ai_queue_processor.dart`** (nouveau) - `AiQueueProcessor`,
+   traite les items `pending` de `AiOperationQueue` un par un :
+   transcription (`AiApiClient.transcribe`) puis extraction
+   (`AiApiClient.extractCandidateFacts`) puis persistance
+   (`saveCandidateFactSet`), pour `AiOperationKind.transcribeAudio`.
+   `extractFromPhoto`/`extractFromDocument` (OCR non câblé) sont laissés
+   `pending` intacts, jamais consommés pour un échec certain. Disjoncteur de
+   retry uniforme (`maxRetryCount`, défaut 5) : au-delà, un item n'est plus
+   retenté automatiquement mais reste en base (rien n'est perdu, pas encore
+   d'écran pour réarmer manuellement - voir `docs/GATE_R2_STATUS.md`).
+   Expose aussi `TranscribeAudioPayload`, le contrat JSON minimal
+   (référence vers un `EvidenceAsset`, jamais un dump complet du dossier -
+   point 14) partagé entre l'écran qui met en file et ce processeur.
+3. **`mobile/lib/core/providers/app_providers.dart`** - `aiQueueProcessorProvider`,
+   même principe de frontière que les autres providers de ce fichier.
+4. **`mobile/lib/features/voice_description/presentation/voice_description_screen.dart`**
+   (S10) - après l'enregistrement réussi d'une note vocale, met en file une
+   opération `transcribeAudio` (rattachée à la première `Issue` de
+   l'incident - limitation V1 documentée, cet écran est aujourd'hui
+   incident-scope et non issue-scope) puis déclenche immédiatement le
+   traitement de la file au mieux-effort. Entièrement best-effort : la note
+   vocale est déjà sauvegardée avec succès avant cette étape, aucune erreur
+   n'est jamais affichée à l'utilisateur pour cette partie optionnelle -
+   "ne jamais bloquer l'utilisateur" (section "Échec IA" de la demande R2).
+5. **Tests écrits (non exécutés, voir `mobile/README.md`)** :
+   `mobile/test/data/ai_queue_processor_test.dart` - même philosophie que
+   `local_incident_repository_test.dart` (vraie base Drift sur fichier
+   temporaire, vrai `EvidenceStorageService` sur vrai dossier temporaire,
+   seul le transport réseau est simulé) : succès bout en bout (transcription
+   + extraction + `CandidateFactSet` persisté), panne réseau -> requeue
+   pending avec retry incrémenté, disjoncteur de retry, opération non
+   supportée (OCR) -> skipped sans être consommée, erreurs de cohérence
+   interne (`issueId` manquant, preuve introuvable).
+
+**Reste à faire (R2, mobile)** : déclenchement de la file au retour réseau
+(listener de connectivité - à ce stade uniquement déclenché juste après une
+capture) ; OCR on-device (ML Kit) et enqueue `extractFromPhoto`/
+`extractFromDocument` depuis `document_capture_screen.dart` ; écran de
+revue réel `facts_review_screen.dart` ; écran pour réarmer manuellement un
+item bloqué par le disjoncteur de retry.
+
 ## [0.3.3] - R2 - client HTTP mobile vers /v1/ai/* - 2026-08-20
 
 Deuxième lot mobile de R2 : le client HTTP qui relie l'app au pipeline IA

@@ -11,6 +11,7 @@
 library;
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
@@ -185,5 +186,33 @@ final class EvidenceStorageService {
         availabilityStatus: domain.EvidenceAvailability.missing,
       );
     }
+  }
+
+  /// Relit les octets bruts du fichier référencé par [asset] - ajouté pour
+  /// R2 : `lib/data/ai_queue_processor.dart` en a besoin pour transmettre un
+  /// audio déjà capturé à `AiApiClient.transcribe` (l'IA n'est JAMAIS
+  /// appelée pendant la capture elle-même, uniquement plus tard via la file
+  /// `AiOperationQueue` - voir docstring de ce fichier et de
+  /// `ai_queue_processor.dart`), tout en respectant la frontière stricte de
+  /// cette classe (SEULE partie de l'app qui lit/écrit des octets pour les
+  /// preuves).
+  ///
+  /// Contrairement à [verify] (qui traite un fichier absent comme un état
+  /// `missing` normal, jamais une exception - R1-T07), cette méthode lève
+  /// [StateError] si le fichier est introuvable : un appelant qui a
+  /// spécifiquement besoin du CONTENU d'une preuve doit être informé
+  /// immédiatement de son indisponibilité (échec explicite et traçable de
+  /// l'opération IA en cours), jamais recevoir un tableau d'octets vide
+  /// silencieux.
+  Future<Uint8List> readBytes(domain.EvidenceAsset asset) async {
+    final File file = File(asset.localFilePath);
+    if (!await file.exists()) {
+      throw StateError(
+        'Fichier de preuve introuvable pour la lecture : '
+        '${asset.localFilePath} (preuve ${asset.id}).',
+      );
+    }
+    final List<int> bytes = await file.readAsBytes();
+    return Uint8List.fromList(bytes);
   }
 }

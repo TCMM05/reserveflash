@@ -26,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../data/ai_queue_processor.dart';
 import '../../data/local/app_database.dart';
 import '../../data/local/evidence_storage.dart';
 import '../../data/local/local_incident_repository.dart';
@@ -100,6 +101,20 @@ final Provider<IncidentRepository> incidentRepositoryProvider =
   final AppDatabase db = ref.watch(appDatabaseProvider);
   final EvidenceStorageService storage = ref.watch(evidenceStorageServiceProvider);
   return LocalIncidentRepository(db, evidenceStorage: storage);
+});
+
+/// R2 - traite la file `AiOperationQueue` (voir `lib/data/ai_queue_processor.dart`) :
+/// relie `incidentRepositoryProvider`/`aiApiClientProvider`/
+/// `evidenceStorageServiceProvider` ci-dessus, aucun écran ne doit
+/// construire `AiQueueProcessor` directement (même principe de frontière
+/// que les autres providers de ce fichier).
+final Provider<AiQueueProcessor> aiQueueProcessorProvider =
+    Provider<AiQueueProcessor>((ref) {
+  return AiQueueProcessor(
+    incidentRepository: ref.watch(incidentRepositoryProvider),
+    aiApiClient: ref.watch(aiApiClientProvider),
+    evidenceStorage: ref.watch(evidenceStorageServiceProvider),
+  );
 });
 
 /// Compteur incrémenté après toute mutation locale (création/suppression

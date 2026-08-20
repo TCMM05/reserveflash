@@ -14,8 +14,11 @@ import 'package:reserveflash/core/providers/app_providers.dart';
 import 'package:reserveflash/core/router/app_router.dart';
 import 'package:reserveflash/core/utils/duration_format.dart';
 import 'package:reserveflash/core/widgets/rf_confirm_dialog.dart';
+import 'package:reserveflash/data/ai_queue_processor.dart';
+import 'package:reserveflash/domain/entities/ai_queue_item.dart';
 import 'package:reserveflash/domain/entities/evidence_asset.dart' as domain;
 import 'package:reserveflash/domain/entities/incident.dart' as domain;
+import 'package:reserveflash/domain/entities/issue.dart' as domain;
 import 'package:reserveflash/features/common/presentation/evidence_audio_player_screen.dart';
 import 'package:reserveflash/features/common/presentation/evidence_thumbnail_tile.dart';
 import 'package:reserveflash/features/common/presentation/missing_incident_view.dart';
@@ -178,6 +181,10 @@ class _VoiceDescriptionScreenState extends ConsumerState<VoiceDescriptionScreen>
               );
       await ref.read(incidentRepositoryProvider).registerEvidenceAsset(asset);
       notifyDataChanged(ref);
+      // R2 : la note vocale est DÉJÀ sauvegardée avec succès à ce stade -
+      // ce qui suit est une étape optionnelle au mieux-effort, voir
+      // docstring de _enqueueTranscriptionBestEffort.
+      await _enqueueTranscriptionBestEffort(asset);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -189,6 +196,55 @@ class _VoiceDescriptionScreenState extends ConsumerState<VoiceDescriptionScreen>
       if (mounted) {
         setState(() => _isProcessingAudio = false);
       }
+    }
+  }
+
+  /// R2 : déclenche la transcription IA de la note vocale qui vient d'être
+  /// enregistrée, au mieux-effort - jamais un blocage de l'utilisateur,
+  /// jamais une erreur affichée ici : la note vocale elle-même est déjà
+  /// sauvegardée avec succès au moment où cette méthode est appelée (voir
+  /// `_stopAndSaveRecording` ci-dessus), l'échec de cette étape optionnelle
+  /// ne doit jamais donner l'impression à l'utilisateur que sa note vocale a
+  /// été perdue.
+  ///
+  /// V1 : rattache l'opération à la première anomalie (`Issue`) de
+  /// l'incident (`CandidateFactSet` est toujours rattaché à une anomalie,
+  /// jamais à l'incident entier - voir
+  /// `lib/data/ai_queue_processor.dart::_runTranscribeAudio`). Cet écran
+  /// (S10) est aujourd'hui incident-scope, pas issue-scope (section 3.2) :
+  /// si plusieurs anomalies existent, seule la première reçoit la
+  /// transcription - limitation V1 documentée (voir
+  /// `docs/GATE_R2_STATUS.md`), à revoir si l'app expose un jour un flux de
+  /// capture par anomalie plutôt que par incident. Si aucune anomalie
+  /// n'existe encore (S10 atteint hors du parcours nominal S06->S15, qui
+  /// passe normalement par S08 avant S10), aucune opération n'est mise en
+  /// file : rien n'est perdu (la note reste consultable), juste aucune
+  /// extraction IA automatique.
+  Future<void> _enqueueTranscriptionBestEffort(domain.EvidenceAsset asset) async {
+    try {
+      final List<domain.Issue> issues =
+          await ref.read(incidentRepositoryProvider).listIssues(widget.incidentId);
+      if (issues.isEmpty) {
+        return;
+      }
+      final TranscribeAudioPayload payload = TranscribeAudioPayload(evidenceAssetId: asset.id);
+      await ref.read(incidentRepositoryProvider).enqueueAiOperation(
+            incidentId: widget.incidentId,
+            issueId: issues.first.id,
+            operationKind: AiOperationKind.transcribeAudio,
+            payloadJson: payload.encode(),
+            idempotencyKey: 'transcribe_audio:${asset.id}',
+          );
+      // Déclenchement "online" au mieux-effort (point 6 - "si une opération
+      // IA nécessite Internet : pending, retry possible à la reconnexion") :
+      // si le backend est injoignable maintenant, l'item reste `pending` en
+      // base et sera retenté par un prochain appel à ce même processeur
+      // (ex : un futur écran de revue, un listener de connectivité - pas
+      // encore câblé, voir docs/GATE_R2_STATUS.md) - jamais une perte.
+      unawaited(ref.read(aiQueueProcessorProvider).processPendingOperations());
+    } catch (_) {
+      // Best-effort explicite (voir docstring ci-dessus) : aucune erreur
+      // affichée à l'utilisateur pour cette étape optionnelle.
     }
   }
 

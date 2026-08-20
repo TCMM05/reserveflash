@@ -131,16 +131,37 @@ corrigée.
     `AiRequestFailedException` (`app/domain/errors/domain_errors.dart`).
   - `app/core/config/backend_config.dart` + câblage `dioProvider`/
     `aiApiClientProvider` dans `app_providers.dart`.
+  - `app/data/local/evidence_storage.dart::readBytes` - relit les octets
+    d'une preuve déjà capturée (nécessaire pour transmettre un audio à
+    `AiApiClient.transcribe`), frontière stricte disque préservée.
+  - `app/data/ai_queue_processor.dart` (`AiQueueProcessor`) - traite les
+    items `pending` de `AiOperationQueue` : transcription -> extraction ->
+    `saveCandidateFactSet`, pour `AiOperationKind.transcribeAudio`.
+    Disjoncteur de retry uniforme (5 tentatives par défaut) - au-delà, un
+    item reste `pending` en base sans être retenté automatiquement, rien
+    n'est supprimé. `extractFromPhoto`/`extractFromDocument` (OCR non câblé)
+    sont laissés intacts, jamais consommés pour un échec certain.
+  - `voice_description_screen.dart` (S10) - SEUL point de déclenchement
+    câblé à ce stade : après l'enregistrement d'une note vocale, met en
+    file une opération `transcribeAudio` (rattachée à la première anomalie
+    de l'incident - limitation V1, cet écran est incident-scope et non
+    issue-scope) puis déclenche le traitement au mieux-effort. Entièrement
+    best-effort : aucune erreur de cette étape optionnelle n'est jamais
+    affichée à l'utilisateur (la note vocale est déjà sauvegardée avec
+    succès avant cette étape).
 - **Reste à faire** :
-  - OCR on-device (ML Kit) sur la photo du BL.
-  - Câblage `AiOperationQueue`/`PendingAIJob` (déclenchement online, mise en
-    file offline, traitement différé au retour réseau) - consommateur de
-    `AiApiClient` + `saveCandidateFactSet`, pas encore écrit : c'est la
-    pièce qui reste à assembler pour que la chaîne complète (capture ->
-    IA -> candidat -> revue) fonctionne de bout en bout.
+  - OCR on-device (ML Kit) sur la photo du BL, et mise en file
+    `extractFromPhoto`/`extractFromDocument` depuis
+    `document_capture_screen.dart` (aujourd'hui aucun déclenchement IA sur
+    ce chemin - seule la note vocale est câblée).
+  - Déclenchement de la file au retour réseau (listener de connectivité) -
+    à ce stade, `AiQueueProcessor.processPendingOperations` n'est appelé
+    que juste après une capture, jamais sur un simple retour en ligne.
   - Écran de revue réel (`facts_review_screen.dart` est aujourd'hui un stub
     à champs codés en dur, non connecté au pipeline) - consommateur de
     `latestCandidateFactSet`.
+  - Écran/action pour réarmer manuellement un item bloqué par le
+    disjoncteur de retry de `AiQueueProcessor` (au-delà de 5 tentatives).
   - `document_metadata_screen.dart` (S07, métadonnées BL - voir décision 4
     ci-dessus).
 

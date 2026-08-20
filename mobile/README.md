@@ -105,9 +105,20 @@ lib/
                                # désormais sur l'appareil, voir ADR 0002)
     templates/fr_v1.dart      # template déterministe (miroir du backend)
   data/
+    ai_queue_processor.dart  # R2 - traite la file AiOperationQueue (déjà
+                              # posée avant R2) : relie ai_api_client.dart et
+                              # IncidentRepository.saveCandidateFactSet, pour
+                              # que la chaîne capture -> IA -> candidat
+                              # fonctionne de bout en bout. Disjoncteur de
+                              # retry uniforme (5 tentatives par défaut) -
+                              # jamais de boucle infinie, jamais de perte.
     local/
       app_database.dart              # schéma Drift - SOURCE DE VÉRITÉ V1
       local_incident_repository.dart # seule implémentation V1 de IncidentRepository
+      evidence_storage.dart  # SEULE partie de l'app qui lit/écrit des
+                              # octets pour les preuves (photos/audio/BL) -
+                              # inclut readBytes() (R2) pour transmettre un
+                              # audio déjà capturé à AiApiClient.transcribe.
     remote/
       ai_api_client.dart   # R2 - client vers /v1/ai/transcribe et /v1/ai/extract,
                             # SEUL appel réseau optionnel de l'app (jamais requis
@@ -127,6 +138,12 @@ test/
                         # responsable'" signalé dans la demande corrective R0.1)
                         # et reserve_composer_test.dart (E2E-01 à E2E-07).
   data/
+    ai_queue_processor_test.dart  # R2 - même philosophie que
+                                   # local_incident_repository_test.dart :
+                                   # vraie base Drift + vrai EvidenceStorageService
+                                   # sur fichiers temporaires réels, seul le
+                                   # transport réseau est simulé (voir
+                                   # AiHttpTransport ci-dessous).
     remote/
       ai_api_client_test.dart  # R2 - teste AiApiClient contre un
                                 # AiHttpTransport factice fait à la main (pas
