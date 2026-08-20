@@ -294,11 +294,6 @@ class OpenAIProvider(AIProvider):
     @staticmethod
     def _raise_for_provider_errors(response: httpx.Response, *, context: str) -> None:
         if response.status_code == httpx.codes.TOO_MANY_REQUESTS:
-            # DEBUG TEMPORAIRE (diagnostic terrain R2, 429 pendant test OCR) -
-            # à retirer une fois la cause distinguée (rate_limit_exceeded vs
-            # insufficient_quota - les deux renvoient 429, seul le corps JSON
-            # les différencie).
-            print(f"[DEBUG 429 {context}] {response.text}")
             raise AIRateLimitedError(f"OpenAI a limité le débit ({context}).")
         if response.status_code >= 500:
             raise AIUnavailableError(

@@ -44,6 +44,18 @@ nouveau test terrain : nouvelle photo de document (nouveau `sourceHash`,
 l'ancien item resterait sinon bloqué au même titre que les incidents connus
 de disjoncteur de retry documentés en `[0.3.8]`).
 
+**Correctif confirmé par un nouveau test terrain immédiat** : après
+application, `POST /v1/ai/extract` part bien désormais dès la validation du
+type de problème (S08) - preuve que la chaîne câblage/OCR/appel réseau
+fonctionne de bout en bout. Le test s'est ensuite heurté à un `429` distinct
+et sans rapport avec le code : `insufficient_quota` /
+`project_spend_limit_exceeded` - limite de dépenses du projet OpenAI
+atteinte (réglage `https://platform.openai.com/settings/<project>/limits`,
+côté compte de l'utilisateur, hors périmètre de ce dépôt). Corps JSON
+confirmé via un log temporaire (ajouté puis retiré dans la foulée, même
+discipline que `[0.3.7]`/`[0.3.8]`) - aucune ambiguïté restante entre
+rate-limit et quota épuisé.
+
 ## [0.3.9] - R2 - OCR on-device (ML Kit) sur le bon de livraison (mobile) - 2026-08-20
 
 Sixième lot mobile de R2. Jusqu'ici, `document_capture_screen.dart` (S06) ne
