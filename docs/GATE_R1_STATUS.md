@@ -1,23 +1,24 @@
 # Statut Gate R1 - "Capture Offline"
 
-**Statut : CORRECTION VÉRIFIÉE PAR EXÉCUTION RÉELLE SUR DEUX ENVIRONNEMENTS
-INDÉPENDANTS** (poste Windows de l'utilisateur : `flutter analyze`/
-`flutter test`/`flutter build apk --debug` tous verts ; CI GitHub Actions,
-run #8, commit `a6d0b34` : 4 jobs verts, 7m54s) **- IL NE RESTE QU'UNE
-NOUVELLE RECETTE TERRAIN MANUELLE SUR APPAREIL AVANT TOUT NOUVEAU TAG.** La
-recette terrain indépendante avait trouvé un défaut réel lors du parcours
-manuel décrit plus bas : les photos et la note vocale capturées n'étaient
-pas consultables/écoutables depuis l'app une fois enregistrées. Voir la
+**Statut : CORRECTION VÉRIFIÉE PAR EXÉCUTION RÉELLE (poste utilisateur +
+CI GitHub Actions, run #8 commit `a6d0b34`) ET PAR UN PARCOURS MANUEL SUR
+APPAREIL RÉEL (Samsung Galaxy A51, rapporté par l'utilisateur testeur :
+"tout marche bien !") - IL NE RESTE QUE LE VERDICT DE LA RECETTE
+INDÉPENDANTE AVANT TOUT NOUVEAU TAG `r1-final`.** La recette terrain
+indépendante avait trouvé un défaut réel lors du parcours manuel décrit
+plus bas : les photos et la note vocale capturées n'étaient pas
+consultables/écoutables depuis l'app une fois enregistrées. Voir la
 section "Correction ciblée post-recette terrain (photo/audio)" ci-dessous
 pour le détail complet, y compris plusieurs bugs réels (tests, pas
 fonctionnalité) trouvés et corrigés uniquement grâce à cette exécution
 réelle - exactement la même rigueur que le reste de R1 initial (voir la
 section "Exécution réelle" plus bas). Le tag `r1-candidate` existant
 correspond au commit D'AVANT ce correctif - **ne pas le considérer comme
-à jour.** Il reste : une nouvelle recette terrain manuelle sur appareil
-ciblée spécifiquement sur le correctif photo/audio - la recette
-indépendante précédente (parcours métier/offline) **ne couvre PAS encore
-ce correctif**, confirmé explicitement par l'utilisateur. Conformément à
+à jour.** Le parcours manuel sur appareil, comme pour R1 initial, reste une
+observation rapportée par l'utilisateur testeur, **pas une validation
+formelle** - la recette indépendante précédente (parcours métier/offline)
+**ne couvre PAS encore ce correctif**, confirmé explicitement par
+l'utilisateur, et doit donc se prononcer dessus séparément. Conformément à
 la demande corrective ("ne pas déclarer R1 PASS vous-même : livrer les
 preuves et laisser la recette indépendante décider"), **aucune section de
 ce document n'affirme que le Gate R1 est validé.**
@@ -294,12 +295,35 @@ Secret scan, Build staging image), 7m54s. Deuxième environnement
 indépendant confirmé (runner GitHub Ubuntu propre), même preuve à deux
 environnements que pour R1 initial.
 
-**Reste à faire avant tout nouveau tag** : réinstaller l'APK et
-reconfirmer manuellement sur un vrai téléphone : ouverture plein écran
-d'une photo, lecture/pause d'une note vocale, suppression/reprise, mode
-avion. Comme pour R1 initial, aucun verdict PASS n'est déclaré ici avant
-cette dernière étape - la recette terrain indépendante précédente ne
-couvre pas ce correctif (confirmé explicitement).
+**Recette manuelle sur appareil réel - FAITE.** L'APK reconstruit a été
+réinstallé sur le même Samsung Galaxy A51 et le parcours ciblé sur ce
+correctif a été rejoué, mode avion actif :
+
+- Photo/BL : ouverture plein écran depuis une vignette confirmée (capture
+  d'écran `docs/screenshots/r1_correction_photo_audio/photo_bl_plein_ecran.png`),
+  zoom/pan (pincement à deux doigts) fonctionnel, bouton retour clair.
+- Note vocale : ouverture plein écran confirmée (capture d'écran
+  `docs/screenshots/r1_correction_photo_audio/note_vocale_lecteur.png`),
+  durée/progression affichée (00:00 / 00:04), lecture déclenche
+  effectivement le son avec progression de la barre, arrêter/recommencer
+  remet la lecture à zéro.
+- Reprendre/supprimer (photo et audio) : fonctionnels, avec confirmation
+  avant suppression.
+- Persistance : photo et note vocale toujours consultables après fermeture
+  complète et réouverture de l'app.
+- Mode avion actif pendant tout le parcours (icône visible dans la barre
+  système sur les captures fournies), aucune dépendance réseau observée.
+
+Résumé rapporté par l'utilisateur testeur : *"tout marche bien !"*
+
+**Comme pour le parcours manuel de R1 initial (voir section dédiée
+ci-dessus), il s'agit d'une observation rapportée par l'utilisateur
+testeur, pas d'une validation formelle** - celle-ci revient à la recette
+indépendante, qui a explicitement confirmé que son verdict PASS précédent
+ne couvrait pas encore ce correctif. **Reste à faire avant tout nouveau
+tag `r1-final`** : soumettre ce correctif (APK + preuves ci-dessus) à la
+recette indépendante pour qu'elle rende un verdict qui le couvre
+explicitement.
 
 ## Tests obligatoires R1 - statut
 
@@ -353,13 +377,15 @@ la recette indépendante (voir section suivante).
    à ce document ni à son auteur - ce document se limite à livrer les
    preuves ci-dessus.
 6. ~~Correction ciblée post-recette terrain (visionneuse photo + lecteur
-   audio)~~ **BOOTSTRAP RÉEL + CI FAITS** : `flutter analyze` (0/0),
-   `flutter test` (67/67), `flutter build apk --debug` (réussi) sur le
-   poste de l'utilisateur, ET CI GitHub Actions verte (run #8, commit
-   `a6d0b34`, 4 jobs, 7m54s) - voir section dédiée ci-dessus pour le détail
-   des bugs réels trouvés et corrigés au passage. **Reste à faire** : une
-   nouvelle recette terrain manuelle ciblée sur : ouverture plein écran
-   d'une photo, lecture/pause d'une note vocale, suppression/reprise, mode
-   avion. Ce n'est qu'une fois cette recette terrain confirmée que la
-   livraison complète (ZIP, APK, SHA-256, captures d'écran, `CHANGELOG.md`,
-   ce document) et un nouveau tag pourront être préparés.
+   audio)~~ **BOOTSTRAP RÉEL + CI + RECETTE MANUELLE SUR APPAREIL FAITS** :
+   `flutter analyze` (0/0), `flutter test` (67/67), `flutter build apk
+   --debug` (réussi) sur le poste de l'utilisateur, CI GitHub Actions verte
+   (run #8, commit `a6d0b34`, 4 jobs, 7m54s), ET parcours manuel sur le
+   Samsung Galaxy A51 confirmé par l'utilisateur testeur ("tout marche
+   bien !") - voir section dédiée ci-dessus pour le détail complet. **Reste
+   à faire avant tout nouveau tag `r1-final`** : soumettre ce correctif à
+   la recette indépendante (dont le verdict PASS précédent ne le couvre
+   pas encore, confirmé explicitement) pour qu'elle rende son verdict.
+   Ce n'est qu'à ce moment que la livraison complète (ZIP, APK, SHA-256,
+   captures d'écran, `CHANGELOG.md`, ce document) et le tag `r1-final`
+   pourront être préparés.
