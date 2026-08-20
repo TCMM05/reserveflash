@@ -124,7 +124,7 @@ void main() {
     }
   });
 
-  Future<domain.Incident> _seedIncidentWithIssue() async {
+  Future<domain.Incident> seedIncidentWithIssue() async {
     final domain.Incident incident = await repository.createIncident(
       occurredAt: DateTime.utc(2026, 1, 10),
     );
@@ -132,7 +132,7 @@ void main() {
     return incident;
   }
 
-  Future<domain.EvidenceAsset> _seedAudioAsset(String incidentId, {String content = 'audio'}) async {
+  Future<domain.EvidenceAsset> seedAudioAsset(String incidentId, {String content = 'audio'}) async {
     final File sourceFile = File('${tempDir.path}/source.m4a');
     await sourceFile.writeAsBytes(utf8.encode(content), flush: true);
     final domain.EvidenceAsset asset = await evidenceStorage.captureFromFile(
@@ -145,7 +145,7 @@ void main() {
     return repository.registerEvidenceAsset(asset);
   }
 
-  Future<AiQueueItem> _enqueueTranscribeAudio({
+  Future<AiQueueItem> enqueueTranscribeAudio({
     required String incidentId,
     required String evidenceAssetId,
     String? issueId,
@@ -173,10 +173,10 @@ void main() {
       'transcrit (round 1) puis extrait et persiste un CandidateFactSet '
       "(round 2), en un seul appel à processPendingOperations",
       () async {
-        final domain.Incident incident = await _seedIncidentWithIssue();
+        final domain.Incident incident = await seedIncidentWithIssue();
         final List<domain.Issue> issues = await repository.listIssues(incident.id);
-        final domain.EvidenceAsset asset = await _seedAudioAsset(incident.id);
-        await _enqueueTranscribeAudio(
+        final domain.EvidenceAsset asset = await seedAudioAsset(incident.id);
+        await enqueueTranscribeAudio(
           incidentId: incident.id,
           evidenceAssetId: asset.id,
           issueId: issues.first.id,
@@ -219,10 +219,10 @@ void main() {
       "l'extraction échoue après une transcription réussie -> le retry ne "
       'refait JAMAIS la transcription déjà payée en tokens',
       () async {
-        final domain.Incident incident = await _seedIncidentWithIssue();
+        final domain.Incident incident = await seedIncidentWithIssue();
         final List<domain.Issue> issues = await repository.listIssues(incident.id);
-        final domain.EvidenceAsset asset = await _seedAudioAsset(incident.id);
-        await _enqueueTranscribeAudio(
+        final domain.EvidenceAsset asset = await seedAudioAsset(incident.id);
+        await enqueueTranscribeAudio(
           incidentId: incident.id,
           evidenceAssetId: asset.id,
           issueId: issues.first.id,
@@ -281,21 +281,21 @@ void main() {
       'enqueueAiOperation avec la même idempotencyKey ne crée jamais de '
       'doublon (jamais deux appels IA payants pour le même contenu)',
       () async {
-        final domain.Incident incident = await _seedIncidentWithIssue();
+        final domain.Incident incident = await seedIncidentWithIssue();
         final List<domain.Issue> issues = await repository.listIssues(incident.id);
-        final domain.EvidenceAsset asset = await _seedAudioAsset(incident.id);
+        final domain.EvidenceAsset asset = await seedAudioAsset(incident.id);
 
         // sourceHash = asset.sha256, comme le fait réellement
         // voice_description_screen.dart (voir sa docstring) - preuve avec
         // la même composition de clé qu'en production, pas juste un id
         // arbitraire.
-        final AiQueueItem first = await _enqueueTranscribeAudio(
+        final AiQueueItem first = await enqueueTranscribeAudio(
           incidentId: incident.id,
           evidenceAssetId: asset.id,
           issueId: issues.first.id,
           sourceHash: asset.sha256,
         );
-        final AiQueueItem second = await _enqueueTranscribeAudio(
+        final AiQueueItem second = await enqueueTranscribeAudio(
           incidentId: incident.id,
           evidenceAssetId: asset.id,
           issueId: issues.first.id,
@@ -310,10 +310,10 @@ void main() {
 
   group('AiQueueProcessor - échecs transitoires (requeue, jamais perdu)', () {
     test('panne réseau au transcribe -> requeue pending, retryCount incrémenté', () async {
-      final domain.Incident incident = await _seedIncidentWithIssue();
+      final domain.Incident incident = await seedIncidentWithIssue();
       final List<domain.Issue> issues = await repository.listIssues(incident.id);
-      final domain.EvidenceAsset asset = await _seedAudioAsset(incident.id);
-      await _enqueueTranscribeAudio(
+      final domain.EvidenceAsset asset = await seedAudioAsset(incident.id);
+      await enqueueTranscribeAudio(
         incidentId: incident.id,
         evidenceAssetId: asset.id,
         issueId: issues.first.id,
@@ -345,10 +345,10 @@ void main() {
       'disjoncteur de retry : au-delà de maxRetryCount, un item pending '
       "n'est plus retenté (skipped) mais reste intact",
       () async {
-        final domain.Incident incident = await _seedIncidentWithIssue();
+        final domain.Incident incident = await seedIncidentWithIssue();
         final List<domain.Issue> issues = await repository.listIssues(incident.id);
-        final domain.EvidenceAsset asset = await _seedAudioAsset(incident.id);
-        await _enqueueTranscribeAudio(
+        final domain.EvidenceAsset asset = await seedAudioAsset(incident.id);
+        await enqueueTranscribeAudio(
           incidentId: incident.id,
           evidenceAssetId: asset.id,
           issueId: issues.first.id,
@@ -383,7 +383,7 @@ void main() {
     test(
       'extractFromPhoto (OCR pas encore câblé) -> skipped, jamais consommé',
       () async {
-        final domain.Incident incident = await _seedIncidentWithIssue();
+        final domain.Incident incident = await seedIncidentWithIssue();
         final List<domain.Issue> issues = await repository.listIssues(incident.id);
         await repository.enqueueAiOperation(
           incidentId: incident.id,
@@ -411,9 +411,9 @@ void main() {
 
   group('AiQueueProcessor - erreurs de cohérence interne (bug de câblage écran)', () {
     test('transcribeAudio sans issueId -> échoue proprement, requeue pending', () async {
-      final domain.Incident incident = await _seedIncidentWithIssue();
-      final domain.EvidenceAsset asset = await _seedAudioAsset(incident.id);
-      await _enqueueTranscribeAudio(incidentId: incident.id, evidenceAssetId: asset.id);
+      final domain.Incident incident = await seedIncidentWithIssue();
+      final domain.EvidenceAsset asset = await seedAudioAsset(incident.id);
+      await enqueueTranscribeAudio(incidentId: incident.id, evidenceAssetId: asset.id);
       // issueId volontairement omis ci-dessus.
 
       final AiQueueProcessor processor = AiQueueProcessor(
@@ -431,9 +431,9 @@ void main() {
     });
 
     test('EvidenceAsset référencé introuvable -> échoue proprement, requeue pending', () async {
-      final domain.Incident incident = await _seedIncidentWithIssue();
+      final domain.Incident incident = await seedIncidentWithIssue();
       final List<domain.Issue> issues = await repository.listIssues(incident.id);
-      await _enqueueTranscribeAudio(
+      await enqueueTranscribeAudio(
         incidentId: incident.id,
         evidenceAssetId: 'evidence-inconnue',
         issueId: issues.first.id,
