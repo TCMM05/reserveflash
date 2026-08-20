@@ -2,6 +2,53 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.13] - R2 - OCR on-device (ML Kit) sur preuve photo générique (mobile) - 2026-08-20
+
+Septième lot mobile de R2. Étend le lot OCR BL (`[0.3.9]`, validé terrain en
+`[0.3.12]`) à `AiOperationKind.extractFromPhoto` (preuve photo générique,
+S09 `evidence_capture_screen.dart`), jusqu'ici non câblé
+(`_isSupported` retournait `false`).
+
+1. **`mobile/lib/data/ai_queue_processor.dart`** - `extractFromPhoto` passe
+   de "non supporté" à câblé (`_runExtractFromPhoto`), en tout point
+   identique à `_runExtractFromDocument` (OCR gratuit on-device, un seul
+   item, même raisonnement que `[0.3.9]`). Nouveau
+   `ExtractFromPhotoPayload` (même forme qu'`ExtractFromDocumentPayload` -
+   référence vers l'`EvidenceAsset`, jamais le texte OCR - classe distincte
+   car `AiOperationKind` reste la source de vérité du type d'opération, pas
+   le nom de la classe payload).
+2. **`mobile/lib/features/evidence_capture/presentation/evidence_capture_screen.dart`** -
+   après l'écriture d'une photo sur disque, met en file `extractFromPhoto`
+   au mieux-effort - MAIS avec deux garde-fous spécifiques à cet écran
+   (contrairement au BL, S09 capture plusieurs photos guidées) :
+   - **SEULE la photo "Photo 2 - Étiquette / référence"** déclenche la mise
+     en file, pas les 3+ photos capturées (vue générale, gros plan de
+     dommage) - la plus susceptible de contenir du texte utile, pour ne pas
+     multiplier les appels IA payants sur des photos qui n'en contiennent
+     probablement pas.
+   - **Sautée si un `CandidateFactSet` existe déjà** pour l'anomalie (ex :
+     déjà obtenu depuis le BL à S06/S08) - `CandidateFactSet` étant
+     append-only (`latestCandidateFactSet` renvoie le plus récent), enqueue
+     sans cette vérification aurait pu écraser silencieusement dans l'UI un
+     résultat déjà bon par un résultat moins bon issu d'une simple photo
+     d'étiquette.
+   Contrairement à S06 (voir le bug corrigé en `[0.3.10]`), cette anomalie
+   existe FORCÉMENT à ce stade : S08 (`issueType`) la crée, S09
+   (`evidenceCapture`) vient après dans le parcours nominal - aucun risque
+   de no-op silencieux équivalent ici.
+3. **Backend : AUCUN changement** (même raison qu'en `[0.3.9]` -
+   `/v1/ai/extract` acceptait déjà `document_text` depuis l'origine de R2).
+4. **`mobile/test/data/ai_queue_processor_test.dart`** - 2 nouveaux tests
+   (même forme que pour `extractFromDocument` en `[0.3.9]`) : succès
+   OCR+extraction en un seul item, et échec OCR propre (requeue pending,
+   jamais de perte). Le test `extractFromPhoto (OCR pas encore câblé) ->
+   skipped` (obsolète, l'opération est maintenant supportée) a été
+   remplacé par ce nouveau groupe.
+
+Non testé en conditions réelles à ce stade (contrairement au BL, validé
+terrain en `[0.3.12]`) - à faire au prochain test terrain (voir
+`docs/GATE_R2_STATUS.md`, "Reste à faire").
+
 ## [0.3.12] - R2 - OCR validé en conditions réelles avec un résultat correctement rempli - 2026-08-20
 
 Suite immédiate de `[0.3.11]`. Même parcours de test refait avec le même

@@ -228,6 +228,40 @@ void main() {
     );
   }
 
+  Future<domain.EvidenceAsset> seedPhotoAsset(String incidentId, {String content = 'photo'}) async {
+    final File sourceFile = File('${tempDir.path}/source_photo.jpg');
+    await sourceFile.writeAsBytes(utf8.encode(content), flush: true);
+    final domain.EvidenceAsset asset = await evidenceStorage.captureFromFile(
+      incidentId: incidentId,
+      sourcePath: sourceFile.path,
+      documentType: domain.EvidenceDocumentType.photo,
+      mimeType: 'image/jpeg',
+      extension: 'jpg',
+    );
+    return repository.registerEvidenceAsset(asset);
+  }
+
+  Future<AiQueueItem> enqueueExtractFromPhoto({
+    required String incidentId,
+    required String evidenceAssetId,
+    String? issueId,
+    String? sourceHash,
+  }) async {
+    final ExtractFromPhotoPayload payload =
+        ExtractFromPhotoPayload(evidenceAssetId: evidenceAssetId);
+    return repository.enqueueAiOperation(
+      incidentId: incidentId,
+      issueId: issueId,
+      operationKind: AiOperationKind.extractFromPhoto,
+      payloadJson: payload.encode(),
+      idempotencyKey: aiOperationIdempotencyKey(
+        incidentId: incidentId,
+        operationKind: AiOperationKind.extractFromPhoto,
+        sourceHash: sourceHash ?? evidenceAssetId,
+      ),
+    );
+  }
+
   group('AiQueueProcessor - transcribeAudio, succès', () {
     test(
       'transcrit (round 1) puis extrait et persiste un CandidateFactSet '
@@ -519,32 +553,81 @@ void main() {
     );
   });
 
-  group('AiQueueProcessor - opérations pas encore supportées', () {
+  group('AiQueueProcessor - extractFromPhoto (OCR preuve générique, R2)', () {
     test(
-      'extractFromPhoto (OCR pas encore câblé) -> skipped, jamais consommé',
+      'OCR (mock) puis extraction en un seul item -> CandidateFactSet persisté',
       () async {
         final domain.Incident incident = await seedIncidentWithIssue();
         final List<domain.Issue> issues = await repository.listIssues(incident.id);
-        await repository.enqueueAiOperation(
+        final domain.EvidenceAsset asset = await seedPhotoAsset(incident.id);
+        await enqueueExtractFromPhoto(
           incidentId: incident.id,
+          evidenceAssetId: asset.id,
           issueId: issues.first.id,
-          operationKind: AiOperationKind.extractFromPhoto,
-          payloadJson: '{}',
-          idempotencyKey: 'extract_from_photo:whatever',
         );
 
+        final _FakeAiHttpTransport transport = _FakeAiHttpTransport(const <String, AiHttpResponse>{
+          '/v1/ai/extract': _successfulExtractResponse,
+        });
+        final _FakeOcrService ocr = _FakeOcrService(<String, String>{
+          asset.localFilePath: 'Réf. produit XZ-42 - 8 reçus sur 10 attendus',
+        });
         final AiQueueProcessor processor = AiQueueProcessor(
           incidentRepository: repository,
-          aiApiClient: AiApiClient(_FakeAiHttpTransport(const <String, AiHttpResponse>{})),
+          aiApiClient: AiApiClient(transport),
           evidenceStorage: evidenceStorage,
+          ocrService: ocr,
         );
 
         final AiQueueProcessingSummary summary = await processor.processPendingOperations();
 
-        expect(summary.skipped, 1);
+        // UN SEUL item (même raisonnement qu'extractFromDocument - voir
+        // docstring d'ExtractFromPhotoPayload) : OCR gratuit on-device, pas
+        // de découpage en deux étapes.
+        expect(summary.succeeded, 1);
+        expect(summary.failed, 0);
+        expect(ocr.calledPaths, <String>[asset.localFilePath]);
+        expect(transport.calledPaths, <String>['/v1/ai/extract']);
+
+        expect(await repository.listPendingAiOperations(), isEmpty);
+        final domain.CandidateFactSet? candidate =
+            await repository.latestCandidateFactSet(issues.first.id);
+        expect(candidate, isNotNull);
+        expect(candidate!.candidateData.issueTypeCandidate, IssueType.missingQty);
+      },
+    );
+
+    test(
+      "l'OCR échoue (ex: bug du plugin natif) -> échoue proprement, requeue "
+      'pending, jamais de perte',
+      () async {
+        final domain.Incident incident = await seedIncidentWithIssue();
+        final List<domain.Issue> issues = await repository.listIssues(incident.id);
+        final domain.EvidenceAsset asset = await seedPhotoAsset(incident.id);
+        await enqueueExtractFromPhoto(
+          incidentId: incident.id,
+          evidenceAssetId: asset.id,
+          issueId: issues.first.id,
+        );
+
+        final _FakeOcrService ocr = _FakeOcrService(
+          const <String, String>{},
+          throwsForPath: asset.localFilePath,
+        );
+        final AiQueueProcessor processor = AiQueueProcessor(
+          incidentRepository: repository,
+          aiApiClient: AiApiClient(_FakeAiHttpTransport(const <String, AiHttpResponse>{})),
+          evidenceStorage: evidenceStorage,
+          ocrService: ocr,
+        );
+
+        final AiQueueProcessingSummary summary = await processor.processPendingOperations();
+
+        expect(summary.failed, 1);
         final List<AiQueueItem> pending = await repository.listPendingAiOperations();
         expect(pending, hasLength(1));
-        expect(pending.first.retryCount, 0);
+        expect(pending.first.retryCount, 1);
+        expect(await repository.latestCandidateFactSet(issues.first.id), isNull);
       },
     );
   });

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,7 +8,11 @@ import 'package:reserveflash/core/design_system/rf_typography.dart';
 import 'package:reserveflash/core/providers/app_providers.dart';
 import 'package:reserveflash/core/router/app_router.dart';
 import 'package:reserveflash/core/widgets/rf_confirm_dialog.dart';
+import 'package:reserveflash/data/ai_queue_processor.dart';
+import 'package:reserveflash/domain/entities/ai_queue_item.dart';
+import 'package:reserveflash/domain/entities/candidate_fact_set.dart' as domain;
 import 'package:reserveflash/domain/entities/evidence_asset.dart' as domain;
+import 'package:reserveflash/domain/entities/issue.dart' as domain;
 import 'package:reserveflash/features/common/presentation/camera_capture_page.dart';
 import 'package:reserveflash/features/common/presentation/evidence_photo_viewer_screen.dart';
 import 'package:reserveflash/features/common/presentation/evidence_thumbnail_tile.dart';
@@ -26,6 +32,18 @@ import 'package:reserveflash/features/common/presentation/missing_incident_view.
 /// stockée. Documenté comme limitation connue (voir CHANGELOG.md/
 /// GATE_R1_STATUS.md) : une future révision pourrait ajouter un champ
 /// `slotLabel` explicite si ce point s'avère gênant en usage réel.
+///
+/// R2 (lot OCR preuve photo générique, `AiOperationKind.extractFromPhoto`) :
+/// SEULE la photo "Étiquette / référence" (la plus susceptible de contenir
+/// du texte utile - contrairement à une vue générale ou un gros plan de
+/// dommage) déclenche une mise en file OCR+IA au mieux-effort, et
+/// uniquement si aucun `CandidateFactSet` n'existe encore pour l'anomalie
+/// (voir `_enqueueOcrExtractionBestEffort` ci-dessous) - pour ne jamais
+/// écraser silencieusement un résultat déjà obtenu par ailleurs (bon de
+/// livraison à S06/S08, note vocale à S10) par un résultat moins bon issu
+/// d'une simple photo d'étiquette. Cette anomalie existe forcément à ce
+/// stade (S08 la crée, S09 vient après - contrairement au bug corrigé pour
+/// S06, voir `issue_type_screen.dart`).
 class EvidenceCaptureScreen extends ConsumerStatefulWidget {
   const EvidenceCaptureScreen({required this.incidentId, super.key});
 
@@ -68,6 +86,9 @@ class _EvidenceCaptureScreenState extends ConsumerState<EvidenceCaptureScreen> {
               );
       await ref.read(incidentRepositoryProvider).registerEvidenceAsset(asset);
       notifyDataChanged(ref);
+      if (label == _guidedLabels[1]) {
+        await _enqueueOcrExtractionBestEffort(asset);
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _errorMessage = "Impossible d'enregistrer la photo : $e");
@@ -76,6 +97,54 @@ class _EvidenceCaptureScreenState extends ConsumerState<EvidenceCaptureScreen> {
       if (mounted) {
         setState(() => _isProcessing = false);
       }
+    }
+  }
+
+  /// R2 (lot OCR preuve photo générique) : voir docstring de fichier. Best
+  /// effort explicite (même politique que partout ailleurs dans le pipeline
+  /// IA) : jamais d'erreur affichée pour cette étape optionnelle, jamais un
+  /// blocage de la capture (déjà écrite sur disque avant cet appel).
+  Future<void> _enqueueOcrExtractionBestEffort(domain.EvidenceAsset asset) async {
+    try {
+      final List<domain.Issue> issues =
+          await ref.read(incidentRepositoryProvider).listIssues(widget.incidentId);
+      if (issues.isEmpty) {
+        return;
+      }
+      final String issueId = issues.first.id;
+      // Garde-fou coût/qualité (voir docstring de fichier) : ne jamais
+      // écraser un CandidateFactSet déjà obtenu (BL, note vocale) par un
+      // résultat potentiellement moins bon issu d'une simple photo
+      // d'étiquette.
+      final domain.CandidateFactSet? existing =
+          await ref.read(incidentRepositoryProvider).latestCandidateFactSet(issueId);
+      if (existing != null) {
+        return;
+      }
+      final ExtractFromPhotoPayload payload =
+          ExtractFromPhotoPayload(evidenceAssetId: asset.id);
+      // sourceHash = SHA-256 déjà calculé à la capture (evidence_storage.dart)
+      // - même principe que le bon de livraison et la note vocale.
+      final String sourceHash = asset.sha256 ?? asset.id;
+      await ref.read(incidentRepositoryProvider).enqueueAiOperation(
+            incidentId: widget.incidentId,
+            issueId: issueId,
+            operationKind: AiOperationKind.extractFromPhoto,
+            payloadJson: payload.encode(),
+            idempotencyKey: aiOperationIdempotencyKey(
+              incidentId: widget.incidentId,
+              operationKind: AiOperationKind.extractFromPhoto,
+              sourceHash: sourceHash,
+            ),
+          );
+      // Déclenchement "online" au mieux-effort - si l'OCR/extraction échoue
+      // maintenant (réseau, quota IA...), l'item reste `pending` en base et
+      // sera retenté par un prochain appel à ce même processeur (ex : écran
+      // de revue des faits) - jamais une perte.
+      unawaited(ref.read(aiQueueProcessorProvider).processPendingOperations());
+    } catch (_) {
+      // Best-effort explicite (voir docstring de fichier) : aucune erreur
+      // affichée à l'utilisateur pour cette étape optionnelle.
     }
   }
 
