@@ -103,6 +103,18 @@ CI complète sur ce commit exact, tag `r1-final` si verte, génération de
 `R1_FINAL_SHA256.txt` (commit, tag, SHA ZIP, SHA APK, run CI). R2 ne
 commence qu'après livraison complète de ce freeze.
 
+**Correction annexe découverte juste avant le push (commit séparé,
+immédiatement après celui-ci)** : `mobile/pubspec.lock` ne contenait pas
+`just_audio`/`audio_session` alors que `pubspec.yaml` les déclare depuis le
+correctif `[0.2.1]` - le lockfile régénéré n'avait jamais été committé (la
+CI s'en sortait car elle relance `flutter pub get`). Corrigé avec le
+contenu réel produit par `flutter pub get` sur le poste de l'utilisateur
+(pas une régénération devinée) : ajout de `just_audio` (direct),
+`audio_session`, `just_audio_platform_interface`, `just_audio_web`,
+`rxdart`, `synchronized` (transitives), aucune version modifiée par
+ailleurs. Aucun changement fonctionnel - uniquement le fichier de
+verrouillage des dépendances.
+
 ## [0.2.0] - R1 "Capture Offline" (candidate) - 2026-08-19
 
 Développée en partant strictement de la baseline gelée `r0-final` (voir
