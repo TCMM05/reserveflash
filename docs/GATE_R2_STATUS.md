@@ -44,8 +44,8 @@ corrigée.
    `document_capture_screen.dart` (bon de livraison) et pour
    `evidence_capture_screen.dart` (preuve photo "Étiquette / référence"
    uniquement, `extractFromPhoto`) - voir section "Avancement réel"
-   ci-dessous. Pas de test terrain de ce second chemin à ce stade (voir
-   "Reste à faire").
+   ci-dessous. Les deux chemins sont désormais validés en conditions réelles
+   (voir "Recette terrain").
 3. **Benchmark avancé de R6 à R2** (voir `benchmark/README.md`, section
    "Changement de séquencement" pour le détail complet). Le dépôt assignait
    jusqu'ici le corpus de qualification (240 cas visés) au jalon "R6 -
@@ -199,8 +199,11 @@ corrigée.
     pour ne jamais écraser silencieusement un résultat déjà bon par un
     résultat potentiellement moins bon. Preuve par test :
     `test/data/ai_queue_processor_test.dart` (2 nouveaux tests, même forme
-    que pour `extractFromDocument`). Pas de test terrain de ce chemin à ce
-    stade (voir "Reste à faire").
+    que pour `extractFromDocument`). **Validé en conditions réelles avec un
+    résultat correctement rempli** (`[0.3.16]`, voir "Recette terrain"
+    ci-dessous) - y compris le cas réel où le garde-fou (2) a dû laisser
+    passer une deuxième tentative après un `CandidateFactSet` vide issu du
+    BL.
   - `facts_review_screen.dart` (S11) - câblage réel (avant : stub à champs
     codés en dur, jamais branché). Une section par anomalie de l'incident ;
     lit `latestCandidateFactSet`/`latestConfirmedFactSet` via 4 nouveaux
@@ -251,9 +254,6 @@ corrigée.
     de `ReserveScreen` en l'atteignant directement, sans navigation - même
     limite déjà documentée pour l'audio dans `evidence_viewer_test.dart`.
 - **Reste à faire** :
-  - Test terrain réel d'`extractFromPhoto` (câblé ce lot, voir ci-dessus,
-    mais jamais exercé sur un vrai appareil/émulateur à ce stade - seule la
-    preuve par test automatisé existe).
   - Déclenchement de la file au retour réseau (listener de connectivité) -
     à ce stade, `AiQueueProcessor.processPendingOperations` n'est appelé
     que juste après une capture ou manuellement depuis `facts_review_screen.dart`,
@@ -289,8 +289,8 @@ dans le code cité, jamais "je pense que c'est fait".
    livraison) et `evidence_capture_screen.dart` (photo "Étiquette /
    référence" uniquement, voir garde-fous ci-dessus) mettent désormais en
    file une extraction OCR (`lib/data/local/ocr_service.dart`, ML Kit
-   on-device, aucun coût IA). Test terrain réel effectué pour le BL
-   uniquement à ce stade (voir "Reste à faire").
+   on-device, aucun coût IA). Test terrain réel effectué pour le BL ET pour
+   la preuve photo générique (voir "Recette terrain").
 4. **Prompt minimal (pas d'historique, pas de dump complet).** ✅ Fait côté
    backend (vérifié) - `openai_provider.py` : le message utilisateur ne
    contient QUE le transcript et/ou le texte OCR, jamais l'historique de
@@ -374,7 +374,7 @@ dans le code cité, jamais "je pense que c'est fait".
     aucun polling ni déclenchement automatique côté serveur.
 
 **Synthèse** : 6 points déjà conformes (2, 4, 7, 13, 14, et désormais 3 pour
-le BL - reste partiel pour une preuve photo générique), 4 partiellement
+le BL et la preuve photo générique), 4 partiellement
 conformes avec du travail réel restant (1, 5, 6, 11 - la partie plomberie
 seulement pour 11), 3 pas commencés du tout (9, 10, 12). Les points 9/10/12
 sont les plus lourds (nouvelle table + instrumentation backend + circuit
@@ -422,15 +422,33 @@ bout avec un résultat correctement rempli**, pas seulement le câblage - au
 même niveau de validation terrain que la note vocale (`[0.3.8]`). Voir
 `CHANGELOG.md [0.3.12]`.
 
+**Mise à jour 2026-08-22 - bug `extractFromPhoto` trouvé et corrigé via les
+logs `[RF]`, puis validé en conditions réelles** : premier test terrain
+d'`extractFromPhoto` (`[0.3.13]`) resté sans effet visible côté écran - le
+garde-fou anti-écrasement bloquait à tort sur un `CandidateFactSet` VIDE
+(OCR du BL n'ayant rien reconnu), diagnostiqué immédiatement grâce aux logs
+`[RF]` (`[0.3.14]`, adoptés sur consigne explicite de l'utilisateur : "pour
+faire des tests il faut toujours insérer des logs pour facilement détecter
+les problèmes"). Corrigé en `[0.3.15]`. Un retest a d'abord montré le même
+log qu'avant le correctif ; vérification du commit `7c4d48f` sur `master`
+dans ce sandbox a confirmé que le correctif était bien présent et correct
+côté livraison - le retest suivant, avec le correctif effectivement actif,
+a confirmé le bon fonctionnement : le BL a de nouveau produit un OCR
+inexploitable ("BIF"), le garde-fou corrigé a laissé passer une deuxième
+tentative sur la photo d'étiquette, et celle-ci a produit un résultat
+correct (Produit = perceuse, Référence = PRC 450, Quantité attendue = 10).
+**`extractFromPhoto` est désormais validé en conditions réelles avec un
+résultat correctement rempli**, au même niveau que le BL et la note vocale.
+Voir `CHANGELOG.md [0.3.15]`/`[0.3.16]`.
+
 Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 - Test sur un **appareil Android physique réel** (celui-ci était un
   émulateur) - networking/latence/micro/caméra réels peuvent différer.
 - Test avec un **vrai bon de livraison papier réel** (celui-ci était un
   texte imprimé affiché sur un écran, pas du papier photographié) - à faire
-  idéalement avant appareil physique. OCR sur preuve photo générique,
-  déclenchement automatique de la file au retour réseau, exigences
-  coût/tokens IA (points 9/10/12) : toujours pas commencés (voir section
-  "Avancement réel" ci-dessus).
+  idéalement avant appareil physique. Déclenchement automatique de la file
+  au retour réseau, exigences coût/tokens IA (points 9/10/12) : toujours pas
+  commencés (voir section "Avancement réel" ci-dessus).
 - **La recette indépendante elle-même** : cette session de test a été menée
   par l'utilisateur avec l'assistant en accompagnement, ce n'est PAS la
   recette indépendante prévue par le processus GATE. Aucun verdict "GATE R2
@@ -444,10 +462,10 @@ Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
    "Avancement réel" ci-dessus). OCR (ML Kit) sur le BL : FAIT et **validé en
    conditions réelles avec un résultat correctement rempli** (`[0.3.9]` à
    `[0.3.12]`, voir "Recette terrain" ci-dessus). OCR sur preuve photo
-   générique (`extractFromPhoto`) : FAIT (`[0.3.13]`, voir "Avancement réel"
-   ci-dessus) mais PAS encore testé en conditions réelles - reste ce test
-   terrain, et un test avec un vrai bon de livraison papier (pas un écran)
-   pour le BL.
+   générique (`extractFromPhoto`) : FAIT (`[0.3.13]`) et **validé en
+   conditions réelles avec un résultat correctement rempli** (`[0.3.16]`,
+   voir "Recette terrain" ci-dessus). Reste un test avec un vrai bon de
+   livraison papier (pas un écran) pour le BL.
 2. Exigences coût/tokens IA (retour équipe, voir section dédiée) : journal
    de consommation backend (point 9), métriques coût benchmark (point 10),
    circuit breaker budgétaire (point 12) - à séquencer explicitement avec

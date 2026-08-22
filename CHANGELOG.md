@@ -2,6 +2,51 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.16] - R2 - extractFromPhoto validé en conditions réelles avec un résultat correctement rempli - 2026-08-22
+
+Retest terrain après le correctif `[0.3.15]`, logs `[RF]` filtrés
+(`flutter logs | Select-String "\[RF\]"`) comme désormais systématique.
+Avant de retester, le code committé (`7c4d48f`) a été relu intégralement
+dans ce sandbox pour écarter par avance une régression côté livraison - la
+condition corrigée (`existing != null && fields.isNotEmpty`) et le nouveau
+libellé de log ("UTILE ... déjà présent" / "... mais VIDE (0 champ) -
+tentative via la photo quand même") étaient bien présents sur `master`.
+
+Séquence observée dans les logs de ce test (incident réel, pas un cas
+synthétique) :
+
+1. `[RF][extractFromDocument] mise en file ...` (S08) puis `[RF][OCR] ... ->
+   BIF` - l'OCR du BL n'a reconnu qu'un texte très court/inutilisable
+   ("BIF"), donc `/v1/ai/extract` a persisté un `CandidateFactSet` **VIDE**
+   (`fields: {}`) - même scénario que celui ayant révélé le bug `[0.3.15]`,
+   mais cette fois rencontré naturellement (pas provoqué pour le diagnostic).
+2. `[RF][extractFromPhoto] CandidateFactSet existant ... mais VIDE (0 champ)
+   - tentative via la photo quand même.` - le correctif `[0.3.15]` s'est
+   déclenché exactement comme prévu : un résultat vide n'a PAS bloqué la
+   tentative sur la photo "Étiquette / référence".
+3. `[RF][OCR] ... -> PRODUIT: PERCEUSE...` - l'OCR de la photo d'étiquette a
+   cette fois lu un texte exploitable.
+4. `[RF][extractFromPhoto] traitement terminé : succeeded=1 failed=0
+   skipped=0.`
+
+Résultat dans `facts_review_screen.dart` : Produit = "PERCEUSE", Référence
+produit = "PRC 450", Quantité attendue = "10", chaque champ marqué "Compris
+par l'IA" - extraction correcte, confirmée visuellement par capture d'écran.
+
+**`extractFromPhoto` est désormais validé en conditions réelles avec un
+résultat correctement rempli**, au même niveau que la note vocale
+(`[0.3.8]`) et l'OCR du BL (`[0.3.12]`) - les trois chemins de mise en file
+IA du mobile ont maintenant chacun une preuve de fonctionnement bout en
+bout sur émulateur, pas seulement une preuve par test automatisé. Ce test
+démontre aussi, en conditions réelles et non provoquées, que le correctif
+`[0.3.15]` fonctionne : un BL illisible par l'OCR ne bloque plus une
+deuxième tentative via la photo d'étiquette.
+
+Ce qui reste non couvert par ce test (inchangé, voir
+`docs/GATE_R2_STATUS.md`) : appareil Android physique réel, vrai bon de
+livraison papier (pas un écran), déclenchement de la file au retour
+réseau, exigences coût/tokens IA (points 9/10/12), recette indépendante.
+
 ## [0.3.15] - R2 - correctif : le garde-fou extractFromPhoto bloquait sur un résultat VIDE - 2026-08-20
 
 Premier test terrain d'`extractFromPhoto` (`[0.3.13]`), diagnostiqué
