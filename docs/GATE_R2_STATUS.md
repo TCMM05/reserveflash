@@ -383,10 +383,14 @@ dans le code cité, jamais "je pense que c'est fait".
    structuré PERMANENTE (`app/infrastructure/ai/usage_journal.py`,
    `[RF][ai-usage]`) est émise pour chaque appel terminé, succès OU échec -
    y compris une sortie invalide après réparation (`AIInvalidOutputError`
-   étendue pour porter les tokens/coût déjà consommés). **Limitation
-   assumée** : logs uniquement = pas de requête agrégée fiable côté backend
-   sans réanalyser les logs, pas de rétention garantie au-delà de la config
-   de logging du déploiement, pas d'historique multi-instance unifié.
+   étendue pour porter les tokens/coût déjà consommés). **✅ Validé en
+   conditions réelles (2026-08-22)** - test terrain via l'app mobile, deux
+   vraies lignes `[RF][ai-usage]` observées dans la console `uvicorn`, coût
+   vérifié à la main (`(1455×0.15 + 34×0.60)/1e6 = 0.00023865$`, exact) -
+   voir "Recette terrain" ci-dessous. **Limitation assumée** : logs
+   uniquement = pas de requête agrégée fiable côté backend sans réanalyser
+   les logs, pas de rétention garantie au-delà de la config de logging du
+   déploiement, pas d'historique multi-instance unifié.
 10. **Métriques coût dans le benchmark (coût moyen/médian/p95, tokens,
     cache, appels par dossier).** ✅ Fait (`[0.3.22]`) - `benchmark/scorer.py`
     (`AggregateMetrics`) calcule désormais coût moyen/médian/p95, tokens
@@ -396,9 +400,12 @@ dans le code cité, jamais "je pense que c'est fait".
     coût réel même en cas d'échec). `run_scorer.py` capture ces champs
     depuis `ExtractionResult`/`AIInvalidOutputError` et les affiche. `None`
     (jamais 0) pour `--provider mock`, qui ne fournit aucune donnée
-    d'usage - donc pas encore mesuré empiriquement avec un vrai modèle
-    OpenAI (dépend toujours d'un run `--provider openai` réel, poste
-    utilisateur, voir points 5/6 ci-dessous).
+    d'usage. **Le mécanisme sous-jacent (capture des tokens/coût par appel,
+    point 9) est validé en conditions réelles** (voir ci-dessus), mais
+    l'agrégation elle-même (moyenne/médiane/p95 sur les 50 cas du corpus)
+    n'a toujours pas tourné avec un vrai run `--provider openai` - le
+    premier essai a tourné par erreur en mode `mock` (voir "Recette
+    terrain" ci-dessous), à refaire.
 11. **Protection environnement TEST (clé séparée, quotas configurables).**
     ❌ Pas commencé - une seule variable `RESERVEFLASH_OPENAI_API_KEY`,
     aucune distinction DEV/TEST/PROD, aucun quota applicatif. Note : la
@@ -416,21 +423,28 @@ dans le code cité, jamais "je pense que c'est fait".
     MÉMOIRE PROCESSUS (singleton `@lru_cache`, `app/api/deps.py::get_ai_budget_guard`),
     consulté avant tout appel HTTP payant, alimenté après chaque appel dont
     le coût est connu. Nouveau `Settings.ai_daily_budget_usd`
-    (`RESERVEFLASH_AI_DAILY_BUDGET_USD`), **désactivé par défaut**. **Limitations
-    assumées** : repart à zéro à chaque redémarrage du process (pas de
-    fenêtre "jour calendaire" au sens strict malgré le nom), pas partagé
-    entre instances déployées, et le comportement du client mobile face à
-    un 402 sur `/v1/ai/*` n'a **pas** été vérifié en conditions réelles
-    (aucun budget configuré à ce jour) - à valider si un budget est un jour
-    activé en déploiement.
+    (`RESERVEFLASH_AI_DAILY_BUDGET_USD`), **désactivé par défaut**.
+    L'enregistrement de la dépense (`record_spend`) est **validé en
+    conditions réelles** (les deux appels du 2026-08-22 ont bien alimenté le
+    compteur, voir point 9 ci-dessus) - mais le BLOCAGE effectif
+    (`check_budget_or_raise` levant `AIBudgetExceededError` une fois un
+    plafond dépassé) n'a lui **pas encore** été testé en conditions réelles
+    (aucun `RESERVEFLASH_AI_DAILY_BUDGET_USD` n'était configuré pendant ce
+    test) - test simple et peu coûteux à faire : configurer un plafond très
+    bas (ex: `0.0001`) et vérifier qu'un appel suivant est bien refusé en
+    402. **Limitations assumées** : repart à zéro à chaque redémarrage du
+    process (pas de fenêtre "jour calendaire" au sens strict malgré le
+    nom), pas partagé entre instances déployées, et le comportement du
+    client mobile face à un 402 sur `/v1/ai/*` n'a **pas** été vérifié.
 13. **Prompt caching (préfixe stable avant données variables).** ✅ Fait,
     déjà conforme par construction - `openai_provider.py` charge le prompt
     système (`prompts/extraction_fr_v1.txt`) tel quel comme préfixe fixe, le
     contenu variable (transcript/OCR) n'arrive qu'ensuite dans le message
-    utilisateur. Le suivi de `cached_tokens` dans les métriques est
-    désormais câblé (`[0.3.22]`, point 9/10 ci-dessus) mais pas encore
-    mesuré avec un vrai modèle OpenAI (dépend d'un run `--provider openai`
-    réel, voir points 5/6).
+    utilisateur. **✅ Validé en conditions réelles (2026-08-22)** : sur le
+    second appel `[RF][ai-usage]` observé en test terrain, OpenAI a
+    effectivement réutilisé `cached_tokens=1408` sur `prompt_tokens=1487`
+    (~95%) - le cache fonctionne réellement, pas seulement par construction
+    du prompt.
 14. **Aucun traitement IA automatique au simple affichage (jamais dans
     `build()`/`initState()`/navigation/polling).** ✅ Fait, vérifié - le seul
     point d'enqueue mobile (`voice_description_screen.dart`) est déclenché
@@ -439,17 +453,24 @@ dans le code cité, jamais "je pense que c'est fait".
     endpoints HTTP, appelés uniquement par une action explicite du client -
     aucun polling ni déclenchement automatique côté serveur.
 
-**Synthèse (mise à jour `[0.3.22]`)** : 9 points désormais conformes (2, 3,
-4, 7, 9, 10, 12, 13, 14), 3 partiellement conformes avec du travail réel
-restant (1, 5, 6), 1 pas commencé (11 - hors périmètre du lot `[0.3.22]`,
-volontairement non traité, voir sa fiche ci-dessus). Les points 9/10/12
-(le trio explicitement signalé "à traiter comme un lot dédié") ont été
-implémentés et testés (`pytest`/`ruff` exécutés dans ce sandbox, backend
-Python disponible ici contrairement au mobile) via l'architecture "logs
-structurés uniquement" décidée avec l'utilisateur - voir `CHANGELOG.md
-[0.3.22]` pour le détail complet et les limitations assumées (disjoncteur
-non persistant/non multi-instance, journal non requêtable sans réanalyser
-les logs, comportement mobile face à un 402 non vérifié). Les points 5/6
+**Synthèse (mise à jour `[0.3.22]`, puis test terrain 2026-08-22)** : 9
+points désormais conformes (2, 3, 4, 7, 9, 10, 12, 13, 14), 3 partiellement
+conformes avec du travail réel restant (1, 5, 6), 1 pas commencé (11 - hors
+périmètre du lot `[0.3.22]`, volontairement non traité, voir sa fiche
+ci-dessus). Les points 9/10/12 (le trio explicitement signalé "à traiter
+comme un lot dédié") ont été implémentés et testés (`pytest`/`ruff`
+exécutés dans ce sandbox) via l'architecture "logs structurés uniquement"
+décidée avec l'utilisateur, PUIS le point 9 (journal) et le point 13 (cache)
+ont été **validés en conditions réelles** le jour même (test terrain via
+l'app mobile, vraies lignes `[RF][ai-usage]` avec de vrais tokens/coût
+OpenAI - voir "Recette terrain" ci-dessous). Ce qui reste non validé en
+conditions réelles : le blocage effectif du disjoncteur de budget (point
+12 - la mesure de dépense, elle, est validée réelle) et l'agrégation
+benchmark sur les 50 cas (point 10 - le premier essai a tourné par erreur
+en mode `mock`). Voir `CHANGELOG.md [0.3.22]` pour le détail complet et les
+limitations assumées (disjoncteur non persistant/non multi-instance,
+journal non requêtable sans réanalyser les logs, comportement mobile face
+à un 402 non vérifié). Les points 5/6
 nécessitent toujours des runs `--provider openai` réels avec une vraie clé
 (poste utilisateur, aucun accès réseau `api.openai.com` dans ce sandbox)
 pour être validés empiriquement, pas seulement codés - et bénéficieront
@@ -544,9 +565,27 @@ réseau validé en conditions réelles.** Voir `CHANGELOG.md [0.3.17]`/
 structurés), coût estimé par appel, disjoncteur de budget en mémoire
 process - voir `CHANGELOG.md [0.3.22]` et la section "Exigences coût/tokens
 IA" ci-dessus pour le détail complet. Testé (`pytest`/`ruff`) dans ce
-sandbox, backend Python disponible ici - **PAS encore testé en conditions
-réelles** (aucun run `--provider openai` réel effectué avec ce nouveau
-code, aucun budget configuré en déploiement).
+sandbox, backend Python disponible ici.
+
+**Mise à jour 2026-08-22 (suite) - point 9 (journal de consommation) et
+point 13 (prompt caching) validés en conditions réelles** : test terrain
+via l'app mobile (photos capturées, `extractFromDocument`/`extractFromPhoto`),
+backend local avec `RESERVEFLASH_AI_PROVIDER=openai` et une vraie clé.
+Deux lignes `[RF][ai-usage]` réelles observées dans la console `uvicorn`,
+avec de vrais tokens OpenAI (1455/1487 prompt, 34/184 completion) et un
+coût calculé correctement (`0.00023865$`, `0.00033345$` - vérifié à la main :
+`(1455×0.15 + 34×0.60)/1e6 = 0.00023865`, exact). Le deuxième appel montre
+`cached_tokens=1408` : le prompt caching OpenAI (point 13) fonctionne bien
+en pratique, pas seulement par construction du prompt. **Nuances qui
+restent ouvertes** : le disjoncteur de budget (point 12) a bien enregistré
+la dépense (`record_spend` appelé) mais son comportement de BLOCAGE
+(`check_budget_or_raise` levant réellement une erreur une fois un plafond
+dépassé) n'a pas encore été testé en conditions réelles - aucun
+`RESERVEFLASH_AI_DAILY_BUDGET_USD` n'était configuré pendant ce test. Le
+benchmark complet (point 10, agrégation sur les 50 cas du corpus) n'a lui
+toujours pas tourné en conditions réelles - le premier essai a tourné par
+erreur en mode `mock` (variables d'environnement PowerShell perdues entre
+deux fenêtres), sans appel OpenAI réel.
 
 Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 - Test sur un **appareil Android physique réel** (celui-ci était un
@@ -554,12 +593,13 @@ Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 - Test avec un **vrai bon de livraison papier réel** (celui-ci était un
   texte imprimé affiché sur un écran, pas du papier photographié) - à faire
   idéalement avant appareil physique.
-- Exigences coût/tokens IA, points 9/10/12 : **implémentées et testées en
-  sandbox** (`[0.3.22]`) mais **pas encore validées en conditions réelles**
-  (pas de run `--provider openai` réel avec le nouveau code de mesure de
-  coût, aucun budget `RESERVEFLASH_AI_DAILY_BUDGET_USD` configuré à ce
-  jour - voir section "Avancement réel" ci-dessus pour le détail des
-  limitations assumées).
+- Exigences coût/tokens IA, points 9/10/12 : point 9 (journal) et point 13
+  (cache) **validés en conditions réelles** (voir ci-dessus). Point 12
+  (disjoncteur) : la mesure de dépense est validée réelle, mais pas encore
+  le blocage effectif à un plafond. Point 10 (métriques benchmark) : code
+  testé en sandbox uniquement, pas encore exécuté avec un vrai run
+  `--provider openai` (voir section "Avancement réel" ci-dessus pour le
+  détail des limitations assumées).
 - **La recette indépendante elle-même** : cette session de test a été menée
   par l'utilisateur avec l'assistant en accompagnement, ce n'est PAS la
   recette indépendante prévue par le processus GATE. Aucun verdict "GATE R2

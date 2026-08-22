@@ -2,6 +2,48 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.23] - R2 - journal coût/tokens IA (point 9) et prompt caching (point 13) validés en conditions réelles - 2026-08-22
+
+Après correctif de doc (`RESERVEFLASH_AI_PROVIDER=openai` implémenté depuis
+R2, plus "non implémenté R0"), test terrain via l'app mobile (photos de BL
+et preuve photo générique) avec backend local `uvicorn` en
+`RESERVEFLASH_AI_PROVIDER=openai` et une vraie clé fournie/configurée par
+l'utilisateur. Deux vraies lignes `[RF][ai-usage]` (`[0.3.22]`) observées
+dans la console backend :
+
+```
+operation=extract provider=openai model=gpt-4o-mini status=OK latency_ms=1765
+prompt_tokens=1455 completion_tokens=34 total_tokens=1489 cached_tokens=0
+estimated_cost_usd=0.00023865 retry_count=0
+
+operation=extract provider=openai model=gpt-4o-mini status=OK latency_ms=1984
+prompt_tokens=1487 completion_tokens=184 total_tokens=1671 cached_tokens=1408
+estimated_cost_usd=0.00033345 retry_count=0
+```
+
+**Point 9 (journal de consommation) validé** : le calcul de coût a été
+vérifié à la main - `(1455×0.15 + 34×0.60)/1 000 000 = 0.00023865$`, exact,
+confirmant `app/infrastructure/ai/pricing.py`. **Point 13 (prompt caching)
+validé** : le second appel montre `cached_tokens=1408` sur
+`prompt_tokens=1487` (~95%) - OpenAI réutilise bien le préfixe système
+stable, pas seulement par construction théorique du prompt.
+
+**Ce qui reste non validé en conditions réelles** (honnête, pas de
+sur-affirmation) :
+- Point 12 (disjoncteur de budget) : l'enregistrement de la dépense
+  (`record_spend`) a bien été exercé par ce test (le compteur en mémoire a
+  reçu ces deux coûts), mais le BLOCAGE effectif
+  (`AiBudgetGuard.check_budget_or_raise` levant `AIBudgetExceededError` une
+  fois un plafond dépassé) n'a pas été testé - aucun
+  `RESERVEFLASH_AI_DAILY_BUDGET_USD` n'était configuré pendant ce test.
+- Point 10 (métriques benchmark) : un premier essai de
+  `benchmark/run_scorer.py --provider openai` a tourné SANS appel OpenAI
+  réel (mode `mock` par erreur - les variables `$env:RESERVEFLASH_...`
+  définies dans une fenêtre PowerShell n'étaient plus actives dans celle où
+  le script a été lancé) - diagnostiqué par les métriques toutes à `None`
+  et `issue_type_accuracy=0.0` sur les 50 cas (signature caractéristique du
+  provider mock). À refaire dans une seule et même session PowerShell.
+
 ## [0.3.22] - R2 - gouvernance coût/tokens IA : journal, coût estimé, disjoncteur budget (backend) - 2026-08-22
 
 Suite au retour équipe sur les exigences coût/tokens IA
