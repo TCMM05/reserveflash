@@ -2,6 +2,47 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.24] - R2 - log diagnostic pour échec IA silencieux sur appareil physique (test terrain en cours) - 2026-08-22
+
+Pendant le premier test terrain sur appareil Android physique avec un vrai
+bon de livraison papier (photo réelle, pas un cas synthétique), l'extraction
+IA échoue systématiquement (`succeeded=0 failed=1/2/3` dans les logs des
+écrans appelants) sans qu'AUCUNE requête n'atteigne jamais la console
+backend - alors que la connectivité réseau app <-> backend a été vérifiée
+correcte à chaque étape (`--host 0.0.0.0`, règle pare-feu Windows entrante
+port 8000 créée en PowerShell élevé, `/health` joignable en 200 OK depuis le
+téléphone, commande `flutter run --dart-define=RESERVEFLASH_BACKEND_BASE_URL=...`
+confirmée octet pour octet correcte).
+
+**Cause du blocage du diagnostic (pas encore du bug lui-même) identifiée** :
+`AiQueueProcessor._processOne` (`mobile/lib/data/ai_queue_processor.dart`)
+capture bien `e.toString()` à chaque échec d'opération (déjà enrichi par
+`AiTransportException`/`AiUnavailableException`,
+`mobile/lib/data/remote/ai_api_client.dart`, avec le type `DioException`
+réel - hôte injoignable, cleartext HTTP bloqué par Android, timeout, etc.)
+mais ne l'imprimait QUE dans la colonne `error` de la base locale (via
+`IncidentRepository.markAiOperationFailed`), jamais côté console. Seuls les
+compteurs agrégés `succeeded=/failed=/skipped=` (loggés par les écrans
+appelants, ex: `document_capture_screen.dart`) étaient visibles dans
+`flutter logs` - insuffisant pour distinguer les causes possibles.
+
+**Correctif (diagnostic uniquement, aucun changement de comportement)** :
+nouveau log `[RF][ai-queue] item <id> (<operationKind>) ÉCHEC ... : <e>`
+juste avant `markAiOperationFailed`, imprimant le message d'exception
+complet (donc le détail Dio réel) - permet enfin de voir la vraie cause du
+prochain échec sur le terrain plutôt que de deviner. Non testé/compilé dans
+ce bac à sable (pas de SDK Flutter ici, voir limitation connue) - à valider
+par l'utilisateur sur sa machine avec `flutter run` + `flutter logs` (sans
+filtrer sur `[RF][extractFromDocument]` uniquement, chercher `[RF][ai-queue]`
+pour capturer ce nouveau log).
+
+**Cause du bug d'extraction lui-même** : toujours non identifiée à ce stade
+- hypothèse à confirmer/infirmer avec ce nouveau log : politique Android de
+blocage du trafic HTTP en clair (`cleartext`) par défaut depuis l'API 28+,
+non vérifiable directement dans ce bac à sable (`mobile/android/` gitignoré
+sauf deux fichiers Gradle - `AndroidManifest.xml` n'existe que sur la
+machine réelle de l'utilisateur, généré par `flutter create .`).
+
 ## [0.3.23] - R2 - journal coût/tokens IA (point 9) et prompt caching (point 13) validés en conditions réelles - 2026-08-22
 
 Après correctif de doc (`RESERVEFLASH_AI_PROVIDER=openai` implémenté depuis

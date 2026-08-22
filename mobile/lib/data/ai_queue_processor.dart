@@ -75,6 +75,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 
 import '../domain/entities/ai_queue_item.dart';
 import '../domain/entities/candidate_fact_set.dart';
@@ -371,6 +372,25 @@ final class AiQueueProcessor {
       // un `failed` définitif ici - c'est
       // `IncidentRepository.markAiOperationFailed` qui décide de cette
       // politique, voir sa docstring : "rien n'est perdu, retry possible").
+      //
+      // DIAGNOSTIC (voir consigne "toujours logger les branches
+      // silencieuses/best-effort") : avant ce log, `e.toString()` était
+      // persisté en base (colonne `error`, visible seulement via une
+      // requête SQL directe) mais JAMAIS imprimé côté console - un item en
+      // échec réseau/config (ex : `AiUnavailableException` enveloppant un
+      // `DioException` - hôte injoignable, cleartext HTTP bloqué par
+      // Android, timeout...) était donc invisible dans `flutter logs`,
+      // seul `succeeded=/failed=/skipped=` agrégé (écrans appelants) étant
+      // visible - insuffisant pour diagnostiquer LA cause. Ce log imprime
+      // le message d'exception complet (déjà formaté avec le type Dio par
+      // `AiTransportException`/`AiUnavailableException`, voir
+      // `lib/data/remote/ai_api_client.dart`).
+      if (kDebugMode) {
+        debugPrint(
+          '[RF][ai-queue] item ${item.id} (${item.operationKind.name}) '
+          'ÉCHEC (retryCount ${item.retryCount} -> ${item.retryCount + 1}) : $e',
+        );
+      }
       await _incidentRepository.markAiOperationFailed(item.id, error: e.toString());
       return AiQueueProcessingOutcome.failed;
     }
