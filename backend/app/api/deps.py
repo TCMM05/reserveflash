@@ -21,6 +21,7 @@ from app.application.ports import (
 )
 from app.config import Settings, get_settings
 from app.infrastructure.ai import build_ai_provider
+from app.infrastructure.ai.budget_guard import AiBudgetGuard
 from app.infrastructure.auth import build_auth_provider
 from app.infrastructure.auth.mock_provider import InvalidTokenError
 from app.infrastructure.db.in_memory_repository import InMemoryIncidentRepository
@@ -36,8 +37,26 @@ def get_repository() -> IncidentRepository:
     return InMemoryIncidentRepository()
 
 
-def get_ai_provider(settings: Annotated[Settings, Depends(get_settings)]) -> AIProvider:
-    return build_ai_provider(settings)
+@lru_cache
+def get_ai_budget_guard() -> AiBudgetGuard:
+    """Singleton process, comme get_repository/get_storage_provider ci-dessus
+    - point 12 (gouvernance coût/tokens IA) : le compteur de dépense doit
+    survivre entre requêtes HTTP, une nouvelle instance par requête rendrait
+    le disjoncteur inopérant (voir docstring AiBudgetGuard). Lit
+    `Settings.ai_daily_budget_usd` directement via get_settings() (pas par
+    injection Depends) pour rester `@lru_cache`-compatible sans dépendre de
+    l'hashabilité de Settings - même pattern que get_storage_provider
+    ci-dessous. Les tests qui changent `RESERVEFLASH_AI_DAILY_BUDGET_USD`
+    doivent appeler `get_ai_budget_guard.cache_clear()` en plus de
+    `get_settings.cache_clear()` (voir tests/api/conftest.py)."""
+    return AiBudgetGuard(daily_budget_usd=get_settings().ai_daily_budget_usd)
+
+
+def get_ai_provider(
+    settings: Annotated[Settings, Depends(get_settings)],
+    budget_guard: Annotated[AiBudgetGuard, Depends(get_ai_budget_guard)],
+) -> AIProvider:
+    return build_ai_provider(settings, budget_guard=budget_guard)
 
 
 @lru_cache

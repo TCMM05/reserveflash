@@ -5,7 +5,12 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_auth_provider, get_repository, get_storage_provider
+from app.api.deps import (
+    get_ai_budget_guard,
+    get_auth_provider,
+    get_repository,
+    get_storage_provider,
+)
 from app.config import get_settings
 from app.infrastructure.auth.mock_provider import MockAuthProvider
 from app.infrastructure.db.in_memory_repository import InMemoryIncidentRepository
@@ -36,6 +41,12 @@ def client(org_id, user_id, monkeypatch):
     # défaut réel reste désactivé).
     monkeypatch.setenv("RESERVEFLASH_ENABLE_LEGACY_CLOUD_INCIDENT_API", "true")
     get_settings.cache_clear()
+    # Point 12 (gouvernance coût/tokens IA) : get_ai_budget_guard est aussi
+    # @lru_cache (voir app/api/deps.py) - sans ce clear, un test qui
+    # configure RESERVEFLASH_AI_DAILY_BUDGET_USD verrait un disjoncteur
+    # construit avec la valeur d'un test précédent (compteur ET seuil
+    # figés dans le cache lru).
+    get_ai_budget_guard.cache_clear()
     app = create_app()
 
     repo = InMemoryIncidentRepository()
@@ -59,3 +70,4 @@ def client(org_id, user_id, monkeypatch):
 
     app.dependency_overrides.clear()
     get_settings.cache_clear()
+    get_ai_budget_guard.cache_clear()

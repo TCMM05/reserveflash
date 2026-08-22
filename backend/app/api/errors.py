@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from app.application.use_cases.generate_export import NoReserveTextError
 from app.application.use_cases.generate_reserve import NoConfirmedFactsError
 from app.domain.errors import (
+    AIBudgetExceededError,
     AIInvalidOutputError,
     AIRateLimitedError,
     AIUnavailableError,
@@ -45,6 +46,14 @@ _DOMAIN_ERROR_STATUS: dict[type[DomainError], int] = {
     # de responsabilité, indemnisation, conclusion/qualification juridique,
     # montant inventé) -> 400, l'utilisateur doit reformuler le champ.
     LiabilityAttributionError: status.HTTP_400_BAD_REQUEST,
+    # Point 12 (gouvernance coût/tokens IA) : 402 Payment Required - ni 429
+    # (ce n'est pas un rate-limit provider) ni 503 (l'IA est disponible,
+    # c'est une politique de dépense interne qui bloque l'appel). Note
+    # honnête : le comportement du client mobile face à un 402 sur
+    # /v1/ai/* n'a pas encore été vérifié en conditions réelles (aucun
+    # budget configuré à ce jour) - à valider si un budget est un jour
+    # activé en déploiement (voir docs/GATE_R2_STATUS.md).
+    AIBudgetExceededError: status.HTTP_402_PAYMENT_REQUIRED,
 }
 
 

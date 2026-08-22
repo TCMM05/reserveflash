@@ -78,14 +78,40 @@ def run(*, provider_kind: str, prompt_version: str = "extraction_fr_v1") -> dict
                 transcript=input_data.get("transcript"),
                 prompt_version=prompt_version,
             )
-        except AIInvalidOutputError:
-            results.append(score_case(case, None, invalid_output=True))
-            raw_records.append({"case_id": case["id"], "status": "AI_INVALID_OUTPUT"})
+        except AIInvalidOutputError as exc:
+            # Point 9/10 (gouvernance cout/tokens IA) : une sortie invalide
+            # a quand meme un cout reel deja consomme - AIInvalidOutputError
+            # (app/domain/errors.py) porte ces attributs precisement pour ce
+            # cas, capture ici plutot que de les perdre.
+            results.append(
+                score_case(
+                    case,
+                    None,
+                    invalid_output=True,
+                    prompt_tokens=exc.prompt_tokens,
+                    completion_tokens=exc.completion_tokens,
+                    total_tokens=exc.total_tokens,
+                    estimated_cost_usd=exc.estimated_cost_usd,
+                    retry_count=exc.retry_count,
+                )
+            )
+            raw_records.append(
+                {
+                    "case_id": case["id"],
+                    "status": "AI_INVALID_OUTPUT",
+                    "prompt_tokens": exc.prompt_tokens,
+                    "completion_tokens": exc.completion_tokens,
+                    "estimated_cost_usd": exc.estimated_cost_usd,
+                    "retry_count": exc.retry_count,
+                }
+            )
             continue
         except (AIUnavailableError, AIRateLimitedError) as exc:
             # Panne infrastructure, pas un jugement sur la qualite du modele
             # - on l'enregistre a part et on ne compte pas ce cas dans le
-            # denominateur qualite (voir docstring de score_case).
+            # denominateur qualite (voir docstring de score_case). Aucune
+            # donnee d'usage fiable ici (l'appel peut avoir echoue avant
+            # toute reponse provider).
             raw_records.append(
                 {"case_id": case["id"], "status": "PROVIDER_ERROR", "detail": str(exc)}
             )
@@ -93,13 +119,31 @@ def run(*, provider_kind: str, prompt_version: str = "extraction_fr_v1") -> dict
 
         screened = screen_candidate_fact_data(extraction.candidate)
         predicted_dict = screened.model_dump(mode="json")
-        results.append(score_case(case, predicted_dict, latency_ms=extraction.latency_ms))
+        results.append(
+            score_case(
+                case,
+                predicted_dict,
+                latency_ms=extraction.latency_ms,
+                prompt_tokens=extraction.prompt_tokens,
+                completion_tokens=extraction.completion_tokens,
+                total_tokens=extraction.total_tokens,
+                cached_tokens=extraction.cached_tokens,
+                estimated_cost_usd=extraction.estimated_cost_usd,
+                retry_count=extraction.retry_count,
+            )
+        )
         raw_records.append(
             {
                 "case_id": case["id"],
                 "status": "OK",
                 "predicted": predicted_dict,
                 "latency_ms": extraction.latency_ms,
+                "prompt_tokens": extraction.prompt_tokens,
+                "completion_tokens": extraction.completion_tokens,
+                "total_tokens": extraction.total_tokens,
+                "cached_tokens": extraction.cached_tokens,
+                "estimated_cost_usd": extraction.estimated_cost_usd,
+                "retry_count": extraction.retry_count,
             }
         )
 
@@ -146,6 +190,18 @@ def main() -> None:
             f"issue_type_accuracy={metrics['issue_type_accuracy']} "
             f"safety_pass_rate={metrics['safety_pass_rate']} "
             f"invalid_output_rate={metrics['invalid_output_rate']:.3f}"
+        )
+        # Point 10 (gouvernance coût/tokens IA) - None pour --provider mock
+        # (aucune donnée d'usage réelle, voir mock_provider.py) : affiché
+        # tel quel, jamais masqué par une valeur par défaut trompeuse.
+        mean_cost = metrics["mean_cost_usd"]
+        mean_cost_str = f"{mean_cost:.6f}$" if mean_cost is not None else "None"
+        print(
+            f"    coût moyen/cas={mean_cost_str} "
+            f"p95_coût={metrics['p95_cost_usd']} "
+            f"tokens_moyen/cas={metrics['mean_total_tokens']} "
+            f"cache_rate={metrics['cache_rate']} "
+            f"appels_moyen/cas={metrics['mean_calls_per_case']}"
         )
 
 

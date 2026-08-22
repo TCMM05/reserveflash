@@ -14,7 +14,13 @@ import json
 import httpx
 import pytest
 
-from app.domain.errors import AIInvalidOutputError, AIRateLimitedError, AIUnavailableError
+from app.domain.errors import (
+    AIBudgetExceededError,
+    AIInvalidOutputError,
+    AIRateLimitedError,
+    AIUnavailableError,
+)
+from app.infrastructure.ai.budget_guard import AiBudgetGuard
 from app.infrastructure.ai.openai_provider import OpenAIProvider
 
 VALID_CANDIDATE_JSON = {
@@ -52,12 +58,36 @@ def _chat_response_body(content: str, request_id: str = "req-1") -> httpx.Respon
     )
 
 
-def _provider_with_transport(handler) -> OpenAIProvider:
+def _chat_response_body_with_usage(
+    content: str,
+    *,
+    request_id: str = "req-1",
+    prompt_tokens: int = 100,
+    completion_tokens: int = 50,
+    cached_tokens: int | None = None,
+) -> httpx.Response:
+    usage = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+    }
+    if cached_tokens is not None:
+        usage["prompt_tokens_details"] = {"cached_tokens": cached_tokens}
+    return httpx.Response(
+        200,
+        json={"choices": [{"message": {"content": content}}], "usage": usage},
+        headers={"x-request-id": request_id},
+    )
+
+
+def _provider_with_transport(
+    handler, *, budget_guard: AiBudgetGuard | None = None
+) -> OpenAIProvider:
     client = httpx.Client(
         base_url="https://api.openai.com/v1",
         transport=httpx.MockTransport(handler),
     )
-    return OpenAIProvider(api_key="test-key", http_client=client)
+    return OpenAIProvider(api_key="test-key", http_client=client, budget_guard=budget_guard)
 
 
 # --- Transcription -----------------------------------------------------
@@ -248,3 +278,189 @@ def test_extract_rate_limited_raises_immediately_without_repair_attempt():
             document_text=None, transcript="texte", prompt_version="extraction_fr_v1"
         )
     assert calls["n"] == 1  # une erreur provider n'est pas une sortie a reparer
+
+
+# --- Points 9/10/12 : usage tokens / coût estimé / retry_count / budget ---
+
+
+def test_extract_populates_usage_and_cost_on_first_try_success():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _chat_response_body_with_usage(
+            json.dumps(VALID_CANDIDATE_JSON), prompt_tokens=1000, completion_tokens=200
+        )
+
+    provider = _provider_with_transport(handler)
+    result = provider.extract_candidate_facts(
+        document_text=None, transcript="texte", prompt_version="extraction_fr_v1"
+    )
+    assert result.prompt_tokens == 1000
+    assert result.completion_tokens == 200
+    assert result.total_tokens == 1200
+    assert result.retry_count == 0
+    # gpt-4o-mini (modele par defaut) est dans la table de tarification
+    # (pricing.py) : le cout doit etre calcule, pas None.
+    expected_cost = (1000 * 0.15 + 200 * 0.60) / 1_000_000
+    assert result.estimated_cost_usd is not None
+    assert abs(result.estimated_cost_usd - expected_cost) < 1e-12
+
+
+def test_extract_sums_usage_across_initial_and_repair_call():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _chat_response_body_with_usage(
+                "ceci n'est pas du JSON", prompt_tokens=300, completion_tokens=40
+            )
+        return _chat_response_body_with_usage(
+            json.dumps(VALID_CANDIDATE_JSON), prompt_tokens=350, completion_tokens=60
+        )
+
+    provider = _provider_with_transport(handler)
+    result = provider.extract_candidate_facts(
+        document_text=None, transcript="texte", prompt_version="extraction_fr_v1"
+    )
+    assert result.retry_count == 1
+    assert result.prompt_tokens == 300 + 350
+    assert result.completion_tokens == 40 + 60
+    assert result.total_tokens == 340 + 410
+
+
+def test_extract_captures_cached_tokens_when_present():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _chat_response_body_with_usage(
+            json.dumps(VALID_CANDIDATE_JSON),
+            prompt_tokens=1000,
+            completion_tokens=200,
+            cached_tokens=800,
+        )
+
+    provider = _provider_with_transport(handler)
+    result = provider.extract_candidate_facts(
+        document_text=None, transcript="texte", prompt_version="extraction_fr_v1"
+    )
+    assert result.cached_tokens == 800
+
+
+def test_extract_missing_usage_field_leaves_tokens_none_not_zero():
+    """Reponse OpenAI sans cle `usage` (jamais rencontre en pratique mais
+    pas garanti par le contrat) -> None, jamais 0 (voir GATE zero
+    invention applique au cout/tokens)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _chat_response_body(json.dumps(VALID_CANDIDATE_JSON))
+
+    provider = _provider_with_transport(handler)
+    result = provider.extract_candidate_facts(
+        document_text=None, transcript="texte", prompt_version="extraction_fr_v1"
+    )
+    assert result.prompt_tokens is None
+    assert result.completion_tokens is None
+    assert result.estimated_cost_usd is None
+
+
+def test_extract_invalid_output_error_carries_usage_for_visibility():
+    """Point 9 : une sortie invalide a quand meme un cout reel - il ne doit
+    pas disparaitre juste parce que l'appel a finalement echoue (voir
+    AIInvalidOutputError, app/domain/errors.py)."""
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return _chat_response_body_with_usage(
+            "toujours pas du JSON valide", prompt_tokens=100, completion_tokens=20
+        )
+
+    provider = _provider_with_transport(handler)
+    with pytest.raises(AIInvalidOutputError) as exc_info:
+        provider.extract_candidate_facts(
+            document_text=None, transcript="texte", prompt_version="extraction_fr_v1"
+        )
+    err = exc_info.value
+    assert err.retry_count == 1
+    assert err.prompt_tokens == 100 + 100
+    assert err.completion_tokens == 20 + 20
+
+
+def test_transcribe_usage_fields_default_to_none_and_zero_retry():
+    """whisper-1 (response_format="json") ne renvoie ni usage ni cout par
+    tokens - voir docstring de transcribe()."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"text": "il manque une unité"})
+
+    provider = _provider_with_transport(handler)
+    result = provider.transcribe(b"fake-audio", "audio/wav")
+    assert result.prompt_tokens is None
+    assert result.estimated_cost_usd is None
+    assert result.retry_count == 0
+
+
+def test_budget_guard_blocks_extract_before_any_http_call_when_exceeded():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return _chat_response_body_with_usage(json.dumps(VALID_CANDIDATE_JSON))
+
+    guard = AiBudgetGuard(daily_budget_usd=0.0)
+    guard.record_spend(0.01)  # déjà au-dessus du budget (0.0)
+    provider = _provider_with_transport(handler, budget_guard=guard)
+
+    with pytest.raises(AIBudgetExceededError):
+        provider.extract_candidate_facts(
+            document_text=None, transcript="texte", prompt_version="extraction_fr_v1"
+        )
+    assert calls["n"] == 0  # aucun appel HTTP n'a dû partir
+
+
+def test_budget_guard_blocks_transcribe_before_any_http_call_when_exceeded():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json={"text": "ok"})
+
+    guard = AiBudgetGuard(daily_budget_usd=0.0)
+    guard.record_spend(0.01)
+    provider = _provider_with_transport(handler, budget_guard=guard)
+
+    with pytest.raises(AIBudgetExceededError):
+        provider.transcribe(b"...", "audio/wav")
+    assert calls["n"] == 0
+
+
+def test_budget_guard_accumulates_spend_across_successful_extract_calls():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _chat_response_body_with_usage(
+            json.dumps(VALID_CANDIDATE_JSON), prompt_tokens=1000, completion_tokens=200
+        )
+
+    guard = AiBudgetGuard(daily_budget_usd=1.0)
+    provider = _provider_with_transport(handler, budget_guard=guard)
+
+    provider.extract_candidate_facts(
+        document_text=None, transcript="texte", prompt_version="extraction_fr_v1"
+    )
+    expected_cost = (1000 * 0.15 + 200 * 0.60) / 1_000_000
+    assert abs(guard.spent_usd() - expected_cost) < 1e-12
+
+    provider.extract_candidate_facts(
+        document_text=None, transcript="texte", prompt_version="extraction_fr_v1"
+    )
+    assert abs(guard.spent_usd() - 2 * expected_cost) < 1e-12
+
+
+def test_no_budget_guard_means_no_enforcement_backward_compatible():
+    """Comportement historique (avant point 12) : sans budget_guard fourni,
+    aucune verification, comme avant l'ajout de cette fonctionnalite."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _chat_response_body_with_usage(json.dumps(VALID_CANDIDATE_JSON))
+
+    provider = _provider_with_transport(handler, budget_guard=None)
+    result = provider.extract_candidate_facts(
+        document_text=None, transcript="texte", prompt_version="extraction_fr_v1"
+    )
+    assert result.candidate.issue_type_candidate == "MISSING_QTY"

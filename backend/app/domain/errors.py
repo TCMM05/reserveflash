@@ -69,9 +69,35 @@ class AIUnavailableError(DomainError):
 
 class AIInvalidOutputError(DomainError):
     """section 7.4 - Sortie structuree LLM invalide apres au plus 1 tentative
-    de reparation controlee. Mappe vers 422 AI_INVALID_OUTPUT."""
+    de reparation controlee. Mappe vers 422 AI_INVALID_OUTPUT.
+
+    Point 9 (gouvernance cout/tokens IA, docs/GATE_R2_STATUS.md) : porte en
+    plus, en attributs optionnels (meme pattern que
+    LiabilityAttributionError ci-dessous), les tokens/cout/retry deja
+    consommes au moment de l'echec - une sortie invalide a quand meme un
+    cout reel, il ne doit pas disparaitre de la visibilite juste parce que
+    l'appel a finalement echoue. Tous optionnels (None/0 par defaut) : ne
+    change rien pour les appelants existants qui construisent cette erreur
+    sans ces informations."""
 
     code = "AI_INVALID_OUTPUT"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        prompt_tokens: int | None = None,
+        completion_tokens: int | None = None,
+        total_tokens: int | None = None,
+        estimated_cost_usd: float | None = None,
+        retry_count: int = 0,
+    ) -> None:
+        super().__init__(message)
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+        self.total_tokens = total_tokens
+        self.estimated_cost_usd = estimated_cost_usd
+        self.retry_count = retry_count
 
 
 class AIRateLimitedError(DomainError):
@@ -79,6 +105,20 @@ class AIRateLimitedError(DomainError):
     bloquante (queue + retry exponentiel cote backend)."""
 
     code = "RATE_LIMITED"
+
+
+class AIBudgetExceededError(DomainError):
+    """Point 12 (gouvernance cout/tokens IA, docs/GATE_R2_STATUS.md) -
+    disjoncteur de budget IA en memoire process
+    (app/infrastructure/ai/budget_guard.py) deja depasse au moment de cet
+    appel : AUCUN appel provider n'a ete effectue pour declencher cette
+    erreur (bloque en amont, avant toute depense). Mappe vers 402
+    AI_BUDGET_EXCEEDED (app/api/errors.py) - distinct de 429 RATE_LIMITED
+    (ce n'est pas un rate-limit provider mais une politique de depense
+    interne) et de 503 AI_UNAVAILABLE (ce n'est pas une panne provider,
+    l'IA est disponible mais le budget configure est atteint)."""
+
+    code = "AI_BUDGET_EXCEEDED"
 
 
 class LiabilityAttributionError(DomainError):

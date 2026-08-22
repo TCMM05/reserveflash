@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 
 from app.api.deps import get_ai_provider
+from app.domain.errors import AIBudgetExceededError
 from app.domain.fact_set import CandidateFactData
 from app.domain.value_objects import ConfidenceLevel, FactSource, IssueType
 from app.infrastructure.ai.mock_provider import MockAIProvider
@@ -130,6 +131,50 @@ def test_transcribe_provider_unavailable_maps_to_503(client):
 
     assert response.status_code == 503
     assert response.json()["code"] == "AI_UNAVAILABLE"
+
+
+class _BudgetExhaustedAIProvider:
+    """Double minimal (pas MockAIProvider - qui ne sait pas simuler ce cas
+    précis) pour le test de mapping HTTP du point 12 (gouvernance
+    coût/tokens IA) : simule un disjoncteur de budget déjà dépassé, comme
+    le ferait app.infrastructure.ai.budget_guard.AiBudgetGuard depuis
+    OpenAIProvider - voir app/infrastructure/ai/openai_provider.py."""
+
+    def transcribe(self, audio_bytes: bytes, mime_type: str):
+        raise AIBudgetExceededError("Budget IA quotidien dépassé (test).")
+
+    def extract_candidate_facts(self, *, document_text, transcript, prompt_version):
+        raise AIBudgetExceededError("Budget IA quotidien dépassé (test).")
+
+
+def test_extract_budget_exceeded_maps_to_402(client):
+    """Point 12 : le disjoncteur de budget en mémoire process, une fois
+    dépassé, doit bloquer l'appel via une réponse HTTP explicite -
+    402 AI_BUDGET_EXCEEDED (app/api/errors.py), distincte de 503
+    AI_UNAVAILABLE (l'IA n'est pas en panne) et de 429 RATE_LIMITED (ce
+    n'est pas un rate-limit provider)."""
+    client.app.dependency_overrides[get_ai_provider] = lambda: _BudgetExhaustedAIProvider()
+    try:
+        response = client.post(
+            "/v1/ai/extract", json={"document_text": "x", "prompt_version": "v1"}
+        )
+    finally:
+        del client.app.dependency_overrides[get_ai_provider]
+
+    assert response.status_code == 402
+    assert response.json()["code"] == "AI_BUDGET_EXCEEDED"
+
+
+def test_transcribe_budget_exceeded_maps_to_402(client):
+    client.app.dependency_overrides[get_ai_provider] = lambda: _BudgetExhaustedAIProvider()
+    try:
+        payload = {"audio_base64": base64.b64encode(b"x").decode(), "mime_type": "audio/wav"}
+        response = client.post("/v1/ai/transcribe", json=payload)
+    finally:
+        del client.app.dependency_overrides[get_ai_provider]
+
+    assert response.status_code == 402
+    assert response.json()["code"] == "AI_BUDGET_EXCEEDED"
 
 
 def test_ai_routes_do_not_expose_incident_or_organization_concepts(client):

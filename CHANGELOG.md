@@ -2,6 +2,94 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.22] - R2 - gouvernance coût/tokens IA : journal, coût estimé, disjoncteur budget (backend) - 2026-08-22
+
+Suite au retour équipe sur les exigences coût/tokens IA
+(`docs/GATE_R2_STATUS.md`, section "Exigences coût/tokens IA", points 9/10/12
+- le trio explicitement signalé "devraient être traités comme un lot
+dédié"). Architecture décidée avec l'utilisateur avant implémentation :
+**logs structurés uniquement**, pas de nouvelle table Postgres/migration
+Alembic - le chemin `/v1/ai/*` (`backend/app/api/routes/ai.py`) reste
+entièrement sans état (aucun repository, aucune authentification), et
+PostgreSQL n'est de toute façon pas une dépendance runtime en V1
+(`app/config.py`, point 11).
+
+**Point 9 - Journal de consommation** : `OpenAIProvider.transcribe()` et
+`extract_candidate_facts()` (`backend/app/infrastructure/ai/openai_provider.py`)
+lisent désormais `usage.prompt_tokens`/`completion_tokens`/`total_tokens`
+(et `usage.prompt_tokens_details.cached_tokens` pour le prompt caching
+OpenAI) dans chaque réponse `/chat/completions`/`/audio/transcriptions`
+quand ce champ est présent - jamais une valeur inventée s'il est absent
+(ex: whisper-1 avec `response_format="json"`, qui ne renvoie ni tokens ni
+coût, tarifé à la durée audio). `TranscriptionResult`/`ExtractionResult`
+(`backend/app/application/ports.py`) portent désormais ces champs, plus
+`estimated_cost_usd` et `retry_count`. Une tentative de réparation
+contrôlée compte comme `retry_count=1` et ses tokens s'additionnent à ceux
+de l'appel initial. Nouveau module `backend/app/infrastructure/ai/usage_journal.py` :
+une ligne de log structuré PERMANENTE (`[RF][ai-usage]`, niveau INFO avec
+handler dédié pour une visibilité garantie sans configuration de
+déploiement) émise pour CHAQUE appel provider terminé, succès ou échec -
+y compris une sortie invalide après réparation (`AIInvalidOutputError`,
+`backend/app/domain/errors.py`, étendue pour porter les tokens/coût déjà
+consommés au moment de l'échec, même pattern que `LiabilityAttributionError`).
+
+**Point 10 - Métriques benchmark** : `benchmark/scorer.py` (`AggregateMetrics`)
+calcule désormais coût moyen/médian/p95, tokens moyen/médian/p95, taux de
+cache (`cache_rate`, depuis les tokens cachés OpenAI) et nombre moyen
+d'appels par cas (`mean_calls_per_case`, reflète les réparations) - calculé
+sur TOUS les cas ayant une donnée d'usage, y compris les sorties invalides
+(un appel qui échoue a quand même un coût réel). `None` (jamais 0) pour
+`--provider mock`, qui ne renvoie aucune donnée d'usage.
+`benchmark/run_scorer.py` capture ces champs depuis `ExtractionResult` et
+depuis `AIInvalidOutputError` et les affiche dans le résumé console.
+
+**Point 12 - Disjoncteur de budget** : nouveau `AIBudgetExceededError`
+(`backend/app/domain/errors.py`) mappé en **402 AI_BUDGET_EXCEEDED**
+(`backend/app/api/errors.py` - distinct de 429 RATE_LIMITED et 503
+AI_UNAVAILABLE, ni l'un ni l'autre ne correspondant sémantiquement).
+`AiBudgetGuard` (`backend/app/infrastructure/ai/budget_guard.py`) : compteur
+de dépense EN MÉMOIRE PROCESSUS, singleton via `app/api/deps.py::get_ai_budget_guard`
+(`@lru_cache`, même pattern que `get_repository`/`get_storage_provider`),
+consulté avant tout appel HTTP payant et alimenté après. Nouveau champ
+`Settings.ai_daily_budget_usd` (`RESERVEFLASH_AI_DAILY_BUDGET_USD`),
+**désactivé par défaut** (`None`) : aucun déploiement existant ne voit son
+comportement changer sans configuration explicite.
+
+**Nouveau module `backend/app/infrastructure/ai/pricing.py`** : table de
+tarification OpenAI codée en dur (USD/million de tokens), `gpt-4o-mini` et
+`gpt-4o` uniquement (modèles réellement utilisables par ce projet) - un
+modèle absent de la table renvoie `None`, jamais une estimation
+approximative (GATE zéro invention appliqué au coût).
+
+**Limitations honnêtes documentées** (dans le code et ici) :
+- le disjoncteur de budget repart à zéro à chaque redémarrage du process et
+  n'est pas partagé entre instances (pas de fenêtre "jour calendaire" au
+  sens strict malgré le nom `ai_daily_budget_usd`) ;
+- le journal de consommation est logs uniquement : pas de requête agrégée
+  fiable côté backend sans réanalyser les logs, pas de rétention garantie ;
+- le comportement du client mobile face à une réponse 402 sur `/v1/ai/*`
+  n'a **pas** été vérifié en conditions réelles (aucun budget configuré à
+  ce jour) - à valider si un budget est un jour activé en déploiement ;
+- la table de tarification (`pricing.py`) est saisie à la main à la date
+  d'écriture de ce lot et devra être révisée manuellement si OpenAI change
+  ses tarifs ;
+- whisper-1 (modèle de transcription par défaut) n'a pas de coût estimé
+  (tarifé à la durée audio, pas aux tokens) - `estimated_cost_usd` reste
+  `None` pour cette route tant que ce modèle est utilisé.
+
+**Tests** : 25 nouveaux tests backend (`tests/infrastructure/test_ai_pricing.py`,
+`test_ai_budget_guard.py`, `test_ai_usage_journal.py`, extension de
+`test_openai_provider.py`, extension de `test_ai_routes.py` pour le mapping
+402) + 5 nouveaux tests benchmark (`benchmark/tests/test_scorer.py`) - tous
+exécutés dans ce sandbox (`pytest`/`ruff`, contrairement au mobile) :
+142 passed, 3 skipped (backend) + 25 passed (benchmark), `ruff check` propre.
+
+**Points 1/5/6/11 (partiels) non traités dans ce lot** - hors du périmètre
+demandé ("travaillons les exigences coût, tokens IA" ciblé sur le trio
+9/10/12 par le retour équipe) : idempotence "résultat déjà valide pour ce
+hash source", mode JSON Schema strict/`max_tokens`, benchmark multi-modèles,
+séparation DEV/TEST/PROD des clés API restent à faire.
+
 ## [0.3.21] - R2 - déclenchement au retour réseau validé en conditions réelles - 2026-08-22
 
 Après le correctif `[0.3.20]` (rafraîchissement UI manquant, trouvé avant

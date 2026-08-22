@@ -30,6 +30,17 @@ class TranscriptionResult:
     model_id: str
     latency_ms: int
     request_id: str | None = None
+    # Point 9 (gouvernance coût/tokens IA, docs/GATE_R2_STATUS.md) - None
+    # quand le provider ne les fournit pas (ex: whisper-1, réponse
+    # response_format="json", voir openai_provider.py::transcribe) : jamais
+    # une valeur inventée (GATE zéro invention appliqué au coût comme à un
+    # fait métier).
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    cached_tokens: int | None = None
+    estimated_cost_usd: float | None = None
+    retry_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +58,17 @@ class ExtractionResult:
     schema_version: str
     latency_ms: int
     request_id: str | None = None
+    # Point 9 (gouvernance coût/tokens IA) - somme sur TOUS les appels
+    # /chat/completions de cette extraction (appel initial + éventuelle
+    # tentative de réparation, voir openai_provider.py::extract_candidate_facts).
+    # `retry_count` = nombre de tentatives de réparation effectuées (0 ou 1,
+    # jamais plus - voir la garde "exactement une réparation" du fichier).
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    cached_tokens: int | None = None
+    estimated_cost_usd: float | None = None
+    retry_count: int = 0
 
 
 class AIProvider(Protocol):

@@ -58,6 +58,16 @@ class Settings(BaseSettings):
     openai_extraction_model: str = "gpt-4o-mini"
     openai_request_timeout_seconds: float = 30.0
 
+    # Point 12 (gouvernance coût/tokens IA, docs/GATE_R2_STATUS.md) -
+    # disjoncteur de budget en mémoire process
+    # (app/infrastructure/ai/budget_guard.py). None = désactivé (défaut) :
+    # aucun déploiement existant ne voit son comportement changer sans
+    # configuration explicite de cette variable. Compteur remis à zéro à
+    # chaque redémarrage du process, non partagé entre instances - voir
+    # docstring de budget_guard.py pour le détail de cette limitation V1
+    # assumée.
+    ai_daily_budget_usd: float | None = None
+
     supabase_service_role_key: SecretStr | None = None
     supabase_url: str | None = None
     storage_bucket: str = "reserveflash-evidence"

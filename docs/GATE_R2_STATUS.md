@@ -370,16 +370,35 @@ dans le code cité, jamais "je pense que c'est fait".
    `IncidentRepository.enqueueAiOperation` vérifie l'existence avant toute
    insertion.
 9. **Journal de consommation obligatoire (tokens, coût, latence, retry,
-   modèle...).** ❌ Pas commencé, confirmé par lecture de code : aucune table
-   ni log ne persiste tokens/coût/retry/`installation_id`/version pipeline
-   côté backend - `latency_ms`/`model_id`/`request_id` existent seulement en
-   transit dans la réponse HTTP, jamais journalisés. Nécessite une nouvelle
-   table + instrumentation de `openai_provider.py` et des routes `/v1/ai/*`.
+   modèle...).** ✅ Fait (`[0.3.22]`), architecture **logs structurés
+   uniquement** décidée explicitement avec l'utilisateur (pas de nouvelle
+   table Postgres/migration - le chemin `/v1/ai/*` reste sans état, voir
+   point 11). `OpenAIProvider.transcribe()`/`extract_candidate_facts()`
+   (`backend/app/infrastructure/ai/openai_provider.py`) lisent
+   `usage.prompt_tokens`/`completion_tokens`/`total_tokens`/`cached_tokens`
+   de chaque réponse OpenAI quand présents ; `TranscriptionResult`/
+   `ExtractionResult` (`app/application/ports.py`) les portent, ainsi que
+   `estimated_cost_usd` (table de tarification codée en dur,
+   `app/infrastructure/ai/pricing.py`) et `retry_count`. Une ligne de log
+   structuré PERMANENTE (`app/infrastructure/ai/usage_journal.py`,
+   `[RF][ai-usage]`) est émise pour chaque appel terminé, succès OU échec -
+   y compris une sortie invalide après réparation (`AIInvalidOutputError`
+   étendue pour porter les tokens/coût déjà consommés). **Limitation
+   assumée** : logs uniquement = pas de requête agrégée fiable côté backend
+   sans réanalyser les logs, pas de rétention garantie au-delà de la config
+   de logging du déploiement, pas d'historique multi-instance unifié.
 10. **Métriques coût dans le benchmark (coût moyen/médian/p95, tokens,
-    cache, appels par dossier).** ❌ Pas commencé - `benchmark/scorer.py`/
-    `run_scorer.py` calculent des métriques de QUALITÉ (précision, rappel,
-    latence p95) mais aucun coût/tokens/taux de cache. Dépend du point 9
-    (rien à agréger sans journal de consommation).
+    cache, appels par dossier).** ✅ Fait (`[0.3.22]`) - `benchmark/scorer.py`
+    (`AggregateMetrics`) calcule désormais coût moyen/médian/p95, tokens
+    moyen/médian/p95, `cache_rate` (depuis les tokens cachés OpenAI) et
+    `mean_calls_per_case` (reflète les tentatives de réparation), sur tous
+    les cas ayant une donnée d'usage (y compris les sorties invalides -
+    coût réel même en cas d'échec). `run_scorer.py` capture ces champs
+    depuis `ExtractionResult`/`AIInvalidOutputError` et les affiche. `None`
+    (jamais 0) pour `--provider mock`, qui ne fournit aucune donnée
+    d'usage - donc pas encore mesuré empiriquement avec un vrai modèle
+    OpenAI (dépend toujours d'un run `--provider openai` réel, poste
+    utilisateur, voir points 5/6 ci-dessous).
 11. **Protection environnement TEST (clé séparée, quotas configurables).**
     ❌ Pas commencé - une seule variable `RESERVEFLASH_OPENAI_API_KEY`,
     aucune distinction DEV/TEST/PROD, aucun quota applicatif. Note : la
@@ -387,17 +406,31 @@ dans le code cité, jamais "je pense que c'est fait".
     façon un geste utilisateur (aucune clé OpenAI n'est jamais manipulée
     dans ce sandbox, contrainte permanente du projet) - ce qui PEUT être
     fait ici est la plomberie de config (lecture de variables d'env
-    séparées, quotas applicatifs), pas la clé elle-même.
-12. **Circuit breaker budgétaire production.** ❌ Pas commencé - aucun
-    plafond de dépense, aucun refus temporaire de traitement IA au-delà
-    d'un seuil, nulle part dans `backend/app/`. Nécessite une nouvelle
-    fonctionnalité backend complète (config + service + tests).
+    séparées, quotas applicatifs), pas la clé elle-même. Non traité dans le
+    lot `[0.3.22]` (hors périmètre demandé - le retour équipe ciblait le
+    trio 9/10/12).
+12. **Circuit breaker budgétaire production.** ✅ Fait (`[0.3.22]`) - nouveau
+    `AIBudgetExceededError` (`app/domain/errors.py`) mappé en **402
+    AI_BUDGET_EXCEEDED** (`app/api/errors.py`). `AiBudgetGuard`
+    (`app/infrastructure/ai/budget_guard.py`) : compteur de dépense EN
+    MÉMOIRE PROCESSUS (singleton `@lru_cache`, `app/api/deps.py::get_ai_budget_guard`),
+    consulté avant tout appel HTTP payant, alimenté après chaque appel dont
+    le coût est connu. Nouveau `Settings.ai_daily_budget_usd`
+    (`RESERVEFLASH_AI_DAILY_BUDGET_USD`), **désactivé par défaut**. **Limitations
+    assumées** : repart à zéro à chaque redémarrage du process (pas de
+    fenêtre "jour calendaire" au sens strict malgré le nom), pas partagé
+    entre instances déployées, et le comportement du client mobile face à
+    un 402 sur `/v1/ai/*` n'a **pas** été vérifié en conditions réelles
+    (aucun budget configuré à ce jour) - à valider si un budget est un jour
+    activé en déploiement.
 13. **Prompt caching (préfixe stable avant données variables).** ✅ Fait,
     déjà conforme par construction - `openai_provider.py` charge le prompt
     système (`prompts/extraction_fr_v1.txt`) tel quel comme préfixe fixe, le
     contenu variable (transcript/OCR) n'arrive qu'ensuite dans le message
-    utilisateur. Le suivi de `cached_tokens` dans les métriques dépend du
-    point 9 (journal de consommation), pas encore fait.
+    utilisateur. Le suivi de `cached_tokens` dans les métriques est
+    désormais câblé (`[0.3.22]`, point 9/10 ci-dessus) mais pas encore
+    mesuré avec un vrai modèle OpenAI (dépend d'un run `--provider openai`
+    réel, voir points 5/6).
 14. **Aucun traitement IA automatique au simple affichage (jamais dans
     `build()`/`initState()`/navigation/polling).** ✅ Fait, vérifié - le seul
     point d'enqueue mobile (`voice_description_screen.dart`) est déclenché
@@ -406,16 +439,21 @@ dans le code cité, jamais "je pense que c'est fait".
     endpoints HTTP, appelés uniquement par une action explicite du client -
     aucun polling ni déclenchement automatique côté serveur.
 
-**Synthèse** : 6 points déjà conformes (2, 4, 7, 13, 14, et désormais 3 pour
-le BL et la preuve photo générique), 4 partiellement
-conformes avec du travail réel restant (1, 5, 6, 11 - la partie plomberie
-seulement pour 11), 3 pas commencés du tout (9, 10, 12). Les points 9/10/12
-sont les plus lourds (nouvelle table + instrumentation backend + circuit
-breaker + extension benchmark) et devraient être traités comme un lot dédié,
-pas ajoutés en urgence à la volée. Les points 5/6 nécessitent des runs
-`--provider openai` réels avec une vraie clé (poste utilisateur, aucun accès
-réseau `api.openai.com` dans ce sandbox) pour être validés empiriquement, pas
-seulement codés.
+**Synthèse (mise à jour `[0.3.22]`)** : 9 points désormais conformes (2, 3,
+4, 7, 9, 10, 12, 13, 14), 3 partiellement conformes avec du travail réel
+restant (1, 5, 6), 1 pas commencé (11 - hors périmètre du lot `[0.3.22]`,
+volontairement non traité, voir sa fiche ci-dessus). Les points 9/10/12
+(le trio explicitement signalé "à traiter comme un lot dédié") ont été
+implémentés et testés (`pytest`/`ruff` exécutés dans ce sandbox, backend
+Python disponible ici contrairement au mobile) via l'architecture "logs
+structurés uniquement" décidée avec l'utilisateur - voir `CHANGELOG.md
+[0.3.22]` pour le détail complet et les limitations assumées (disjoncteur
+non persistant/non multi-instance, journal non requêtable sans réanalyser
+les logs, comportement mobile face à un 402 non vérifié). Les points 5/6
+nécessitent toujours des runs `--provider openai` réels avec une vraie clé
+(poste utilisateur, aucun accès réseau `api.openai.com` dans ce sandbox)
+pour être validés empiriquement, pas seulement codés - et bénéficieront
+désormais des métriques coût/tokens du point 10 une fois ce run effectué.
 
 ### Recette terrain - PREMIÈRE VALIDATION RÉELLE (émulateur, PAS encore appareil physique ni recette indépendante)
 
@@ -501,14 +539,27 @@ utilisateur après la reconnexion. **Déclenchement automatique au retour
 réseau validé en conditions réelles.** Voir `CHANGELOG.md [0.3.17]`/
 `[0.3.20]`.
 
+**Mise à jour 2026-08-22 (suite) - gouvernance coût/tokens IA (points
+9/10/12) implémentée côté backend** : journal de consommation (logs
+structurés), coût estimé par appel, disjoncteur de budget en mémoire
+process - voir `CHANGELOG.md [0.3.22]` et la section "Exigences coût/tokens
+IA" ci-dessus pour le détail complet. Testé (`pytest`/`ruff`) dans ce
+sandbox, backend Python disponible ici - **PAS encore testé en conditions
+réelles** (aucun run `--provider openai` réel effectué avec ce nouveau
+code, aucun budget configuré en déploiement).
+
 Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 - Test sur un **appareil Android physique réel** (celui-ci était un
   émulateur) - networking/latence/micro/caméra réels peuvent différer.
 - Test avec un **vrai bon de livraison papier réel** (celui-ci était un
   texte imprimé affiché sur un écran, pas du papier photographié) - à faire
-  idéalement avant appareil physique. Exigences coût/tokens IA (points
-  9/10/12) : toujours pas commencées (voir section "Avancement réel"
-  ci-dessus).
+  idéalement avant appareil physique.
+- Exigences coût/tokens IA, points 9/10/12 : **implémentées et testées en
+  sandbox** (`[0.3.22]`) mais **pas encore validées en conditions réelles**
+  (pas de run `--provider openai` réel avec le nouveau code de mesure de
+  coût, aucun budget `RESERVEFLASH_AI_DAILY_BUDGET_USD` configuré à ce
+  jour - voir section "Avancement réel" ci-dessus pour le détail des
+  limitations assumées).
 - **La recette indépendante elle-même** : cette session de test a été menée
   par l'utilisateur avec l'assistant en accompagnement, ce n'est PAS la
   recette indépendante prévue par le processus GATE. Aucun verdict "GATE R2
@@ -533,12 +584,17 @@ Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
    livraison papier (pas un écran) pour le BL.
 2. Exigences coût/tokens IA (retour équipe, voir section dédiée) : journal
    de consommation backend (point 9), métriques coût benchmark (point 10),
-   circuit breaker budgétaire (point 12) - à séquencer explicitement avec
-   l'équipe plutôt qu'improvisé, vu leur ampleur.
+   circuit breaker budgétaire (point 12) - **implémentées et testées en
+   sandbox** (`[0.3.22]`), **pas encore validées en conditions réelles**
+   (voir "Recette terrain" ci-dessus). Point 11 (séparation DEV/TEST/PROD
+   des clés) reste non traité, hors périmètre de ce lot.
 3. Recette terrain avec clé OpenAI réelle sur appareil Android réel
-   (protocole fourni par l'équipe, section "Test terrain obligatoire").
+   (protocole fourni par l'équipe, section "Test terrain obligatoire") - à
+   l'occasion de ce run, vérifier aussi que le journal `[RF][ai-usage]`
+   s'affiche bien côté serveur réel (pas seulement dans les tests).
 4. Run `benchmark/run_scorer.py --provider openai` réel (+ comparaison
-   multi-modèles, point 6 de la section coût/tokens), rapport versionné.
+   multi-modèles, point 6 de la section coût/tokens), rapport versionné -
+   inclura désormais les métriques coût/tokens réelles du point 10.
 5. Livraison `r2-candidate` (ZIP, commit, tag, APK CI, SHA-256, ce document
    mis à jour, `R2_BENCHMARK_REPORT.md`, captures, preuve du test terrain) -
    soumission à la recette indépendante. **Aucun verdict "GATE R2 PASS" ne

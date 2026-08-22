@@ -108,6 +108,19 @@ class CaseResult:
     safety_checked: bool = False
     safety_violation: bool = False
     latency_ms: int | None = None
+    # Point 9/10 (gouvernance cout/tokens IA, docs/GATE_R2_STATUS.md) -
+    # renseignes depuis ExtractionResult (appel reussi) OU depuis
+    # AIInvalidOutputError (appel finalement invalide - voir
+    # app/domain/errors.py, ces attributs y existent precisement pour ce
+    # cas : un cas invalid_output a quand meme un cout reel). None si le
+    # pipeline utilise (ex: MockAIProvider) ne fournit aucune donnee
+    # d'usage - jamais une valeur inventee.
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    cached_tokens: int | None = None
+    estimated_cost_usd: float | None = None
+    retry_count: int = 0
 
 
 def score_case(
@@ -117,6 +130,12 @@ def score_case(
     invalid_output: bool = False,
     semantic_rejected: bool = False,
     latency_ms: int | None = None,
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    total_tokens: int | None = None,
+    cached_tokens: int | None = None,
+    estimated_cost_usd: float | None = None,
+    retry_count: int = 0,
 ) -> CaseResult:
     """Compare `predicted` (candidat FINAL, apres passage par
     candidate_guard - c'est ce que verrait reellement l'utilisateur) au gold
@@ -124,13 +143,24 @@ def score_case(
     AIInvalidOutputError pour ce cas ; `semantic_rejected=True` si le
     candidat a ete entierement rejete par une validation semantique en amont
     (distinct d'un simple champ retire par candidate_guard, qui reste
-    visible dans `predicted`)."""
+    visible dans `predicted`).
+
+    Les kwargs usage/cout (point 9/10) sont acceptes MEME si `invalid_output`
+    est vrai - un appel dont la sortie est finalement invalide a quand meme
+    consomme des tokens reels (voir AIInvalidOutputError,
+    app/domain/errors.py)."""
     result = CaseResult(
         case_id=case["id"],
         category=case["category"],
         invalid_output=invalid_output,
         semantic_rejected=semantic_rejected,
         latency_ms=latency_ms,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        cached_tokens=cached_tokens,
+        estimated_cost_usd=estimated_cost_usd,
+        retry_count=retry_count,
     )
     if invalid_output or semantic_rejected or predicted is None:
         return result
@@ -184,6 +214,20 @@ class AggregateMetrics:
     safety_pass_rate: float | None
     median_latency_ms: float | None
     p95_latency_ms: float | None
+    # Point 10 (gouvernance cout/tokens IA, docs/GATE_R2_STATUS.md, retour
+    # equipe 2026-08-20 : "mean/median/p95 cost, tokens, cache rate, calls
+    # per dossier"). None quand aucun cas de ce groupe n'a de donnee d'usage
+    # (ex: --provider mock, voir run_scorer.py) - jamais une valeur
+    # inventee. "dossier" ~= un cas du corpus ici (le benchmark n'a pas la
+    # notion d'incident/dossier a plusieurs issues, voir docstring module).
+    mean_cost_usd: float | None
+    median_cost_usd: float | None
+    p95_cost_usd: float | None
+    mean_total_tokens: float | None
+    median_total_tokens: float | None
+    p95_total_tokens: float | None
+    cache_rate: float | None
+    mean_calls_per_case: float | None
 
     def to_dict(self) -> dict:
         return {
@@ -200,6 +244,14 @@ class AggregateMetrics:
             "safety_pass_rate": self.safety_pass_rate,
             "median_latency_ms": self.median_latency_ms,
             "p95_latency_ms": self.p95_latency_ms,
+            "mean_cost_usd": self.mean_cost_usd,
+            "median_cost_usd": self.median_cost_usd,
+            "p95_cost_usd": self.p95_cost_usd,
+            "mean_total_tokens": self.mean_total_tokens,
+            "median_total_tokens": self.median_total_tokens,
+            "p95_total_tokens": self.p95_total_tokens,
+            "cache_rate": self.cache_rate,
+            "mean_calls_per_case": self.mean_calls_per_case,
         }
 
 
@@ -216,11 +268,16 @@ def _percentile(sorted_values: list[float], pct: float) -> float:
     return sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * (k - lower)
 
 
+def _mean(values: list[float]) -> float | None:
+    return (sum(values) / len(values)) if values else None
+
+
 def aggregate(results: list[CaseResult], *, group: str) -> AggregateMetrics:
     n = len(results)
     if n == 0:
         return AggregateMetrics(
-            group, 0, 0.0, 0.0, None, None, None, 0.0, 0, None, None, None, None
+            group, 0, 0.0, 0.0, None, None, None, 0.0, 0, None, None, None, None,
+            None, None, None, None, None, None, None, None,
         )
 
     invalid_count = sum(1 for r in results if r.invalid_output)
@@ -257,6 +314,29 @@ def aggregate(results: list[CaseResult], *, group: str) -> AggregateMetrics:
     median_latency = _percentile(latencies, 0.5) if latencies else None
     p95_latency = _percentile(latencies, 0.95) if latencies else None
 
+    # Point 10 : delibmerement calcule sur TOUS les `results` (pas
+    # seulement `valid`) - un cas invalid_output a quand meme un cout reel
+    # consomme (voir AIInvalidOutputError, app/domain/errors.py, et
+    # docstring de score_case ci-dessus). `cost_bearing` = les cas pour
+    # lesquels une donnee d'usage existe du tout (exclut --provider mock,
+    # qui ne renvoie jamais de tokens - voir run_scorer.py).
+    cost_bearing = [r for r in results if r.total_tokens is not None]
+    costs = sorted(r.estimated_cost_usd for r in cost_bearing if r.estimated_cost_usd is not None)
+    total_tokens_values = sorted(float(r.total_tokens) for r in cost_bearing)
+    mean_cost = _mean(costs)
+    median_cost = _percentile(costs, 0.5) if costs else None
+    p95_cost = _percentile(costs, 0.95) if costs else None
+    mean_total_tokens = _mean(total_tokens_values)
+    median_total_tokens = _percentile(total_tokens_values, 0.5) if total_tokens_values else None
+    p95_total_tokens = _percentile(total_tokens_values, 0.95) if total_tokens_values else None
+
+    cacheable = [r for r in cost_bearing if r.cached_tokens is not None and r.prompt_tokens]
+    total_cached = sum(r.cached_tokens for r in cacheable)
+    total_cacheable_prompt = sum(r.prompt_tokens for r in cacheable)
+    cache_rate = (total_cached / total_cacheable_prompt) if total_cacheable_prompt else None
+
+    mean_calls_per_case = _mean([1 + r.retry_count for r in cost_bearing])
+
     return AggregateMetrics(
         group=group,
         case_count=n,
@@ -271,6 +351,14 @@ def aggregate(results: list[CaseResult], *, group: str) -> AggregateMetrics:
         safety_pass_rate=safety_pass_rate,
         median_latency_ms=median_latency,
         p95_latency_ms=p95_latency,
+        mean_cost_usd=mean_cost,
+        median_cost_usd=median_cost,
+        p95_cost_usd=p95_cost,
+        mean_total_tokens=mean_total_tokens,
+        median_total_tokens=median_total_tokens,
+        p95_total_tokens=p95_total_tokens,
+        cache_rate=cache_rate,
+        mean_calls_per_case=mean_calls_per_case,
     )
 
 

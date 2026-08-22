@@ -25,6 +25,19 @@ Comportement conforme à la demande de démarrage R2, section "Échec IA" :
     `clarification_question_id` UNIQUEMENT via le catalogue contrôlé
     (app.domain.clarification_questions) - jamais une valeur produite
     directement par le modèle.
+
+Points 9/10/12 (gouvernance coût/tokens IA, docs/GATE_R2_STATUS.md, retour
+équipe 2026-08-20) - ajoutés à ce fichier :
+  - chaque appel /chat/completions ou /audio/transcriptions lit
+    `body["usage"]` quand présent (jamais inventé s'il est absent) et le
+    propage dans TranscriptionResult/ExtractionResult (app/application/ports.py) ;
+  - un coût estimé est calculé via une table de tarification codée en dur
+    (app/infrastructure/ai/pricing.py, None si le modèle n'y figure pas) ;
+  - CHAQUE appel terminé (succès ou échec) émet une ligne de log structuré
+    PERMANENTE via app/infrastructure/ai/usage_journal.py (point 9) ;
+  - un disjoncteur de budget optionnel (app/infrastructure/ai/budget_guard.py,
+    point 12) est consulté avant tout appel HTTP payant, et alimenté après
+    chaque appel dont le coût est connu.
 """
 
 from __future__ import annotations
@@ -33,6 +46,7 @@ import json
 import logging
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 from pydantic import ValidationError
@@ -41,6 +55,11 @@ from app.application.ports import AIProvider, ExtractionResult, TranscriptionRes
 from app.domain.clarification_questions import clarification_question_id_for_field
 from app.domain.errors import AIInvalidOutputError, AIRateLimitedError, AIUnavailableError
 from app.domain.fact_set import CandidateFactData
+from app.infrastructure.ai.pricing import estimate_chat_cost_usd
+from app.infrastructure.ai.usage_journal import log_ai_usage
+
+if TYPE_CHECKING:
+    from app.infrastructure.ai.budget_guard import AiBudgetGuard
 
 PROVIDER_NAME = "openai"
 
@@ -51,6 +70,11 @@ PROVIDER_NAME = "openai"
 # les statuts d'erreur OpenAI une fois pour toutes - visible par défaut dans
 # les logs `uvicorn` (configuration standard `logging`, niveau WARNING),
 # jamais la clé API (le corps de réponse OpenAI ne la contient jamais).
+#
+# Distinct du logger dédié `reserveflash.ai.usage` (usage_journal.py,
+# point 9) : celui-ci diagnostique une erreur provider (corps de réponse
+# brut), l'autre journalise systématiquement la CONSOMMATION (tokens/coût/
+# latence/retry) de chaque appel terminé, succès compris.
 logger = logging.getLogger(__name__)
 
 # prompts/ est au niveau racine du dépôt, backend/ est un sous-dossier -
@@ -107,6 +131,40 @@ def _load_prompt(prompt_version: str) -> str:
         raise ValueError(f"Prompt version inconnue : {prompt_version!r} ({path})") from exc
 
 
+def _sum_optional_ints(a: int | None, b: int | None) -> int | None:
+    """Somme deux compteurs de tokens optionnels (point 9) - None seulement
+    si LES DEUX sont None (aucune donnée d'usage disponible pour aucun des
+    deux appels), jamais un 0 qui laisserait croire à une mesure réelle."""
+    if a is None and b is None:
+        return None
+    return (a or 0) + (b or 0)
+
+
+def _usage_ints(usage: dict) -> tuple[int | None, int | None, int | None, int | None]:
+    """Extrait (prompt_tokens, completion_tokens, total_tokens, cached_tokens)
+    du champ `usage` d'une réponse OpenAI - `cached_tokens` vient de
+    `usage.prompt_tokens_details.cached_tokens` (prompt caching automatique
+    OpenAI, point 10 "cache rate"). Toutes les clés sont absentes -> None,
+    jamais 0 par défaut (0 affirmerait "aucun token utilisé", ce qui serait
+    faux, on ne SAIT simplement pas)."""
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    total_tokens = usage.get("total_tokens")
+    cached_tokens = None
+    details = usage.get("prompt_tokens_details")
+    if isinstance(details, dict):
+        cached_tokens = details.get("cached_tokens")
+    return prompt_tokens, completion_tokens, total_tokens, cached_tokens
+
+
+def _status_for_error(exc: Exception) -> str:
+    if isinstance(exc, AIRateLimitedError):
+        return "AI_RATE_LIMITED"
+    if isinstance(exc, AIInvalidOutputError):
+        return "AI_INVALID_OUTPUT"
+    return "AI_UNAVAILABLE"
+
+
 class OpenAIProvider(AIProvider):
     def __init__(
         self,
@@ -117,9 +175,13 @@ class OpenAIProvider(AIProvider):
         extraction_model: str = "gpt-4o-mini",
         timeout_seconds: float = 30.0,
         http_client: httpx.Client | None = None,
+        budget_guard: AiBudgetGuard | None = None,
     ) -> None:
         self._transcription_model = transcription_model
         self._extraction_model = extraction_model
+        # Point 12 (gouvernance coût/tokens IA) : None = aucun disjoncteur
+        # (comportement historique, voir app/infrastructure/ai/__init__.py).
+        self._budget_guard = budget_guard
         # http_client injectable : les tests fournissent un client construit
         # avec `transport=httpx.MockTransport(...)`, sans jamais toucher au
         # réseau réel (voir tests/infrastructure/test_openai_provider.py).
@@ -134,6 +196,9 @@ class OpenAIProvider(AIProvider):
     # ------------------------------------------------------------------
 
     def transcribe(self, audio_bytes: bytes, mime_type: str) -> TranscriptionResult:
+        if self._budget_guard is not None:
+            self._budget_guard.check_budget_or_raise(operation="transcribe")
+
         started = time.monotonic()
         try:
             response = self._client.post(
@@ -148,20 +213,75 @@ class OpenAIProvider(AIProvider):
                 },
             )
         except httpx.TimeoutException as exc:
+            self._log_transcribe_outcome(started, "AI_UNAVAILABLE", None)
             raise AIUnavailableError("Timeout OpenAI (transcription).") from exc
         except httpx.TransportError as exc:
+            self._log_transcribe_outcome(started, "AI_UNAVAILABLE", None)
             raise AIUnavailableError("Erreur réseau OpenAI (transcription).") from exc
 
-        self._raise_for_provider_errors(response, context="transcription")
+        request_id = response.headers.get("x-request-id")
+        try:
+            self._raise_for_provider_errors(response, context="transcription")
+        except (AIRateLimitedError, AIUnavailableError) as exc:
+            self._log_transcribe_outcome(started, _status_for_error(exc), request_id)
+            raise
 
         body = response.json()
+        # whisper-1 (modèle par défaut, app/config.py) est tarifé à la DURÉE
+        # audio, pas aux tokens, et `response_format="json"` utilisé ici ne
+        # renvoie ni `usage` ni `duration` - estimated_cost_usd reste donc
+        # None pour ce modèle (jamais une valeur inventée, voir pricing.py).
+        # Les modèles de transcription plus récents (ex: gpt-4o-transcribe)
+        # renvoient bien `usage` : ces champs se peupleront automatiquement
+        # le jour où RESERVEFLASH_OPENAI_TRANSCRIPTION_MODEL change, sans
+        # modification de ce fichier.
+        usage = body.get("usage") or {}
+        prompt_tokens, completion_tokens, total_tokens, cached_tokens = _usage_ints(usage)
+        estimated_cost_usd: float | None = None
+        if self._budget_guard is not None:
+            self._budget_guard.record_spend(estimated_cost_usd)
+
         latency_ms = int((time.monotonic() - started) * 1000)
+        log_ai_usage(
+            operation="transcribe",
+            provider=PROVIDER_NAME,
+            model_id=self._transcription_model,
+            status="OK",
+            latency_ms=latency_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cached_tokens=cached_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+            retry_count=0,
+            request_id=request_id,
+        )
         return TranscriptionResult(
             text=body.get("text", ""),
             provider=PROVIDER_NAME,
             model_id=self._transcription_model,
             latency_ms=latency_ms,
-            request_id=response.headers.get("x-request-id"),
+            request_id=request_id,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cached_tokens=cached_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+            retry_count=0,
+        )
+
+    def _log_transcribe_outcome(
+        self, started: float, status: str, request_id: str | None
+    ) -> None:
+        latency_ms = int((time.monotonic() - started) * 1000)
+        log_ai_usage(
+            operation="transcribe",
+            provider=PROVIDER_NAME,
+            model_id=self._transcription_model,
+            status=status,
+            latency_ms=latency_ms,
+            retry_count=0,
+            request_id=request_id,
         )
 
     # ------------------------------------------------------------------
@@ -179,26 +299,89 @@ class OpenAIProvider(AIProvider):
         user_content = self._build_user_content(document_text=document_text, transcript=transcript)
 
         started = time.monotonic()
-        raw_text, request_id = self._call_chat_completion(system_prompt, user_content)
+        retry_count = 0
+        prompt_tokens: int | None = None
+        completion_tokens: int | None = None
+        total_tokens: int | None = None
+        cached_tokens: int | None = None
+
+        try:
+            raw_text, request_id, usage = self._call_chat_completion(system_prompt, user_content)
+        except (AIRateLimitedError, AIUnavailableError, AIInvalidOutputError) as exc:
+            self._log_extract_outcome(started, retry_count, None, None, None, None, exc, None)
+            raise
+        prompt_tokens, completion_tokens, total_tokens, cached_tokens = _usage_ints(usage)
 
         candidate, error_for_repair = self._try_parse_candidate(raw_text)
         if candidate is None:
             # Exactement UNE tentative de réparation contrôlée (section
             # "Échec IA" de la demande R2) - jamais de boucle.
-            repaired_text, request_id = self._call_chat_completion(
-                system_prompt,
-                user_content,
-                repair_of=raw_text,
-                repair_error=error_for_repair,
-            )
+            retry_count = 1
+            try:
+                repaired_text, request_id, repair_usage = self._call_chat_completion(
+                    system_prompt,
+                    user_content,
+                    repair_of=raw_text,
+                    repair_error=error_for_repair,
+                )
+            except (AIRateLimitedError, AIUnavailableError, AIInvalidOutputError) as exc:
+                self._log_extract_outcome(
+                    started, retry_count, prompt_tokens, completion_tokens, total_tokens,
+                    cached_tokens, exc, request_id,
+                )
+                raise
+            r_prompt, r_completion, r_total, r_cached = _usage_ints(repair_usage)
+            prompt_tokens = _sum_optional_ints(prompt_tokens, r_prompt)
+            completion_tokens = _sum_optional_ints(completion_tokens, r_completion)
+            total_tokens = _sum_optional_ints(total_tokens, r_total)
+            cached_tokens = _sum_optional_ints(cached_tokens, r_cached)
+
             candidate, error_for_repair = self._try_parse_candidate(repaired_text)
             if candidate is None:
+                estimated_cost_usd = self._estimate_and_record_cost(
+                    prompt_tokens, completion_tokens
+                )
+                latency_ms = int((time.monotonic() - started) * 1000)
+                log_ai_usage(
+                    operation="extract",
+                    provider=PROVIDER_NAME,
+                    model_id=self._extraction_model,
+                    status="AI_INVALID_OUTPUT",
+                    latency_ms=latency_ms,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                    cached_tokens=cached_tokens,
+                    estimated_cost_usd=estimated_cost_usd,
+                    retry_count=retry_count,
+                    request_id=request_id,
+                )
                 raise AIInvalidOutputError(
                     "Sortie IA non conforme au schéma CandidateFactData après "
-                    f"une tentative de réparation contrôlée : {error_for_repair}"
+                    f"une tentative de réparation contrôlée : {error_for_repair}",
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                    estimated_cost_usd=estimated_cost_usd,
+                    retry_count=retry_count,
                 )
 
+        estimated_cost_usd = self._estimate_and_record_cost(prompt_tokens, completion_tokens)
         latency_ms = int((time.monotonic() - started) * 1000)
+        log_ai_usage(
+            operation="extract",
+            provider=PROVIDER_NAME,
+            model_id=self._extraction_model,
+            status="OK",
+            latency_ms=latency_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cached_tokens=cached_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+            retry_count=retry_count,
+            request_id=request_id,
+        )
         return ExtractionResult(
             candidate=candidate,
             provider=PROVIDER_NAME,
@@ -207,7 +390,55 @@ class OpenAIProvider(AIProvider):
             schema_version="candidate_fact_set.v1",
             latency_ms=latency_ms,
             request_id=request_id,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cached_tokens=cached_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+            retry_count=retry_count,
         )
+
+    def _log_extract_outcome(
+        self,
+        started: float,
+        retry_count: int,
+        prompt_tokens: int | None,
+        completion_tokens: int | None,
+        total_tokens: int | None,
+        cached_tokens: int | None,
+        exc: Exception,
+        request_id: str | None,
+    ) -> None:
+        estimated_cost_usd = self._estimate_and_record_cost(prompt_tokens, completion_tokens)
+        latency_ms = int((time.monotonic() - started) * 1000)
+        log_ai_usage(
+            operation="extract",
+            provider=PROVIDER_NAME,
+            model_id=self._extraction_model,
+            status=_status_for_error(exc),
+            latency_ms=latency_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cached_tokens=cached_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+            retry_count=retry_count,
+            request_id=request_id,
+        )
+
+    def _estimate_and_record_cost(
+        self, prompt_tokens: int | None, completion_tokens: int | None
+    ) -> float | None:
+        estimated_cost_usd: float | None = None
+        if prompt_tokens is not None and completion_tokens is not None:
+            estimated_cost_usd = estimate_chat_cost_usd(
+                self._extraction_model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        if self._budget_guard is not None:
+            self._budget_guard.record_spend(estimated_cost_usd)
+        return estimated_cost_usd
 
     # ------------------------------------------------------------------
     # Internes
@@ -231,7 +462,10 @@ class OpenAIProvider(AIProvider):
         *,
         repair_of: str | None = None,
         repair_error: str | None = None,
-    ) -> tuple[str, str | None]:
+    ) -> tuple[str, str | None, dict]:
+        if self._budget_guard is not None:
+            self._budget_guard.check_budget_or_raise(operation="extract")
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
@@ -271,7 +505,7 @@ class OpenAIProvider(AIProvider):
             raise AIInvalidOutputError(
                 "Réponse OpenAI sans contenu exploitable (structure inattendue)."
             ) from exc
-        return content, response.headers.get("x-request-id")
+        return content, response.headers.get("x-request-id"), body.get("usage") or {}
 
     @staticmethod
     def _try_parse_candidate(raw_text: str) -> tuple[CandidateFactData | None, str | None]:

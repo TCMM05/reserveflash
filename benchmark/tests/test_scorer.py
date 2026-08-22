@@ -252,6 +252,100 @@ def test_aggregate_core_vs_stress_groups_stress_categories_together():
     assert report["ALL"].case_count == 3
 
 
+# --- Point 9/10 : usage tokens / cout / cache rate / calls per dossier -----
+
+
+def test_score_case_stores_usage_fields_even_on_invalid_output():
+    """Un cas invalid_output a quand meme consomme des tokens reels (voir
+    AIInvalidOutputError, app/domain/errors.py) - score_case doit les
+    conserver, pas les perdre juste parce que predicted=None."""
+    result = score_case(
+        CORE_CASE,
+        None,
+        invalid_output=True,
+        prompt_tokens=120,
+        completion_tokens=30,
+        total_tokens=150,
+        estimated_cost_usd=0.0001,
+        retry_count=1,
+    )
+    assert result.prompt_tokens == 120
+    assert result.total_tokens == 150
+    assert result.estimated_cost_usd == 0.0001
+    assert result.retry_count == 1
+
+
+def test_aggregate_cost_and_token_stats():
+    results = [
+        score_case(
+            CORE_CASE,
+            {"issue_type_candidate": "MISSING_QTY", "fields": {}},
+            total_tokens=total,
+            estimated_cost_usd=cost,
+        )
+        for total, cost in [(100, 0.001), (200, 0.002), (300, 0.003)]
+    ]
+    metrics = aggregate(results, group="cost")
+    assert metrics.mean_total_tokens == 200
+    assert metrics.median_total_tokens == 200
+    assert abs(metrics.mean_cost_usd - 0.002) < 1e-12
+    assert metrics.median_cost_usd == 0.002
+
+
+def test_aggregate_cost_stats_are_none_when_no_usage_data_at_all():
+    """--provider mock (voir run_scorer.py) ne renvoie jamais de tokens -
+    les metriques cout/tokens doivent rester None, jamais 0 (0 laisserait
+    croire a une mesure reelle de cout nul)."""
+    results = [score_case(CORE_CASE, {"issue_type_candidate": "MISSING_QTY", "fields": {}})]
+    metrics = aggregate(results, group="mock")
+    assert metrics.mean_cost_usd is None
+    assert metrics.mean_total_tokens is None
+    assert metrics.cache_rate is None
+    assert metrics.mean_calls_per_case is None
+
+
+def test_aggregate_cache_rate():
+    results = [
+        score_case(
+            CORE_CASE,
+            {"issue_type_candidate": "MISSING_QTY", "fields": {}},
+            prompt_tokens=1000,
+            completion_tokens=100,
+            total_tokens=1100,
+            cached_tokens=800,
+        ),
+        score_case(
+            CORE_CASE,
+            {"issue_type_candidate": "MISSING_QTY", "fields": {}},
+            prompt_tokens=1000,
+            completion_tokens=100,
+            total_tokens=1100,
+            cached_tokens=200,
+        ),
+    ]
+    metrics = aggregate(results, group="cache")
+    # (800 + 200) / (1000 + 1000) = 0.5
+    assert metrics.cache_rate == 0.5
+
+
+def test_aggregate_mean_calls_per_case_reflects_retries():
+    no_retry = score_case(
+        CORE_CASE,
+        {"issue_type_candidate": "MISSING_QTY", "fields": {}},
+        total_tokens=100,
+        retry_count=0,
+    )
+    one_retry = score_case(
+        CORE_CASE,
+        {"issue_type_candidate": "MISSING_QTY", "fields": {}},
+        total_tokens=200,
+        retry_count=1,
+    )
+    metrics = aggregate([no_retry, one_retry], group="calls")
+    # (1 appel + 2 appels) / 2 cas = 1.5
+    assert metrics.mean_calls_per_case == 1.5
+
+
 def test_full_corpus_scores_without_crashing_using_a_trivial_empty_predictor():
     """Preuve d'integration minimale : le scorer tourne sur TOUT le corpus
     reel (pas seulement des cas synthetiques de test) sans exception, meme
