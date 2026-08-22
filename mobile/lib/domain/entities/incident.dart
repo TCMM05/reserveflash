@@ -19,6 +19,7 @@ final class Incident {
     this.supplierName,
     this.carrierName,
     this.deliveryRef,
+    this.deliveryDate,
     this.notes,
     this.serverCreatedAt,
     this.archived = false,
@@ -33,6 +34,10 @@ final class Incident {
   final String? supplierName;
   final String? carrierName;
   final String? deliveryRef;
+  // R2 (S07, `document_metadata_screen.dart`) - date figurant sur le bon de
+  // livraison lui-même, distincte d'[occurredAt] (voir docstring de
+  // `LocalIncidents.deliveryDate`, lib/data/local/app_database.dart).
+  final DateTime? deliveryDate;
   final String? notes;
   final bool archived;
 
@@ -47,6 +52,7 @@ final class Incident {
       supplierName: supplierName,
       carrierName: carrierName,
       deliveryRef: deliveryRef,
+      deliveryDate: deliveryDate,
       notes: notes,
       archived: archived ?? this.archived,
     );

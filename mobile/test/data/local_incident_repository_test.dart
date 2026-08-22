@@ -117,11 +117,17 @@ void main() {
             LocalIncidentRepository(firstOpen);
 
         final DateTime occurredAt = DateTime.utc(2026, 8, 19, 10, 30);
+        // R2 (S07) - deliveryDate distinct d'occurredAt (voir docstring
+        // LocalIncidents.deliveryDate) : une date volontairement différente
+        // ici pour que le test échoue si les deux colonnes étaient
+        // confondues par erreur.
+        final DateTime deliveryDate = DateTime.utc(2026, 8, 18);
         final domain.Incident created = await firstRepository.createIncident(
           occurredAt: occurredAt,
           supplierName: 'Fournisseur Test SARL',
           carrierName: 'Transporteur Test',
           deliveryRef: 'BL-2026-000123',
+          deliveryDate: deliveryDate,
           notes: 'Palette abîmée à réception.',
         );
 
@@ -157,8 +163,61 @@ void main() {
         expect(reopened.supplierName, equals('Fournisseur Test SARL'));
         expect(reopened.carrierName, equals('Transporteur Test'));
         expect(reopened.deliveryRef, equals('BL-2026-000123'));
+        expect(reopened.deliveryDate, equals(deliveryDate));
         expect(reopened.notes, equals('Palette abîmée à réception.'));
         expect(reopened.archived, isFalse);
+
+        await secondOpen.close();
+      },
+    );
+
+    test(
+      // R2 (S07) - `updateIncidentMetadata` n'avait jusqu'ici aucune
+      // couverture de test dans ce fichier, malgré 3 écrans appelants
+      // (voir_document_metadata_screen.dart`, `incident_detail_screen.dart`,
+      // `voice_description_screen.dart`) - comblé à l'occasion de l'ajout de
+      // `deliveryDate`.
+      'updateIncidentMetadata réécrit les champs, y compris deliveryDate, et '
+      'persiste après fermeture/réouverture',
+      () async {
+        final AppDatabase firstOpen = _openFileBackedDatabase(dbFile);
+        final LocalIncidentRepository firstRepository =
+            LocalIncidentRepository(firstOpen);
+
+        final domain.Incident created = await firstRepository.createIncident(
+          occurredAt: DateTime.utc(2026, 8, 20, 8),
+        );
+        expect(created.deliveryDate, isNull);
+
+        final DateTime newDeliveryDate = DateTime.utc(2026, 8, 19);
+        final domain.Incident updated = await firstRepository.updateIncidentMetadata(
+          incidentId: created.id,
+          occurredAt: created.occurredAt,
+          supplierName: 'Fournisseur Après Correction',
+          carrierName: 'Transporteur Après Correction',
+          deliveryRef: 'BL-CORRIGE-001',
+          deliveryDate: newDeliveryDate,
+          notes: null,
+        );
+        expect(updated.deliveryDate, equals(newDeliveryDate));
+        expect(updated.supplierName, equals('Fournisseur Après Correction'));
+
+        await firstOpen.close();
+
+        final AppDatabase secondOpen = _openFileBackedDatabase(dbFile);
+        final LocalIncidentRepository secondRepository =
+            LocalIncidentRepository(secondOpen);
+        final domain.Incident? reopened = await secondRepository.getIncident(created.id);
+
+        expect(reopened, isNotNull);
+        expect(reopened!.deliveryDate, equals(newDeliveryDate));
+        expect(reopened.supplierName, equals('Fournisseur Après Correction'));
+        expect(reopened.carrierName, equals('Transporteur Après Correction'));
+        expect(reopened.deliveryRef, equals('BL-CORRIGE-001'));
+        // `notes` explicitement passé à `null` : effacé, pas seulement
+        // "non fourni" (voir docstring `updateIncidentMetadata` -
+        // `incident_repository.dart`).
+        expect(reopened.notes, isNull);
 
         await secondOpen.close();
       },

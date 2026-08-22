@@ -25,9 +25,12 @@ import 'package:reserveflash/features/common/presentation/missing_incident_view.
 /// (point 2, capture 100% hors ligne, R1-T10). R2 (lot OCR, correctif) : une
 /// tentative de mise en file de l'extraction OCR+IA a lieu ici au
 /// mieux-effort (voir `_enqueueOcrExtractionBestEffort` ci-dessous), mais
-/// dans le parcours nominal (S06 -> S08 issueType) elle est un no-op
-/// silencieux, faute d'`Issue` encore créée à ce stade - la mise en file
-/// réelle a lieu à S08, voir `issue_type_screen.dart`. Même philosophie que
+/// dans le parcours nominal (S06 -> S07 documentMetadata -> S08 issueType)
+/// elle est un no-op silencieux, faute d'`Issue` encore créée à ce stade
+/// (S07 ne crée pas non plus d'`Issue` - voir `document_metadata_screen.dart` :
+/// il ne fait qu'éditer les métadonnées déjà existantes de l'`Incident`
+/// lui-même) - la mise en file réelle a lieu à S08, voir
+/// `issue_type_screen.dart`. Même philosophie que
 /// `voice_description_screen.dart` en tout état de cause : l'échec (ou
 /// l'absence) de cette étape optionnelle ne doit jamais donner l'impression
 /// que la photo elle-même a été perdue, ni bloquer la suite du parcours.
@@ -89,9 +92,10 @@ class _DocumentCaptureScreenState extends ConsumerState<DocumentCaptureScreen> {
   /// l'utilisateur, jamais une erreur affichée ici (voir docstring de
   /// fichier). Un `CandidateFactSet` est toujours rattaché à une anomalie
   /// (`Issue`), jamais à l'incident entier - or dans le parcours NOMINAL (S06
-  /// documentCapture -> S08 issueType -> ...), aucune `Issue` n'existe encore
-  /// à ce stade (elle n'est créée qu'à S08) : cet appel-ci est donc un no-op
-  /// silencieux dans le cas normal, volontairement laissé pour le seul cas
+  /// documentCapture -> S07 documentMetadata -> S08 issueType -> ...), aucune
+  /// `Issue` n'existe encore à ce stade (elle n'est créée qu'à S08) : cet
+  /// appel-ci est donc un no-op silencieux dans le cas normal, volontairement
+  /// laissé pour le seul cas
   /// où cet écran est atteint avec une anomalie déjà existante (ex :
   /// "Reprendre la photo" depuis `incident_detail_screen.dart` sur un
   /// dossier déjà avancé). **La mise en file réelle, pour le parcours
@@ -239,8 +243,12 @@ class _DocumentCaptureScreenState extends ConsumerState<DocumentCaptureScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
+                    // R2 (câblage S07, voir document_metadata_screen.dart) :
+                    // pousse désormais vers la vérification des informations
+                    // du BL avant le type de problème, au lieu de sauter
+                    // directement à S08 comme avant ce lot.
                     onPressed: hasDocument && !_isProcessing
-                        ? () => context.pushIssueType(widget.incidentId)
+                        ? () => context.pushDocumentMetadata(widget.incidentId)
                         : null,
                     child: const Text('Continuer'),
                   ),

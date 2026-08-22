@@ -49,6 +49,11 @@ class IncidentDetailScreen extends ConsumerWidget {
     final TextEditingController deliveryRefController =
         TextEditingController(text: incident.deliveryRef ?? '');
     final TextEditingController notesController = TextEditingController(text: incident.notes ?? '');
+    // R2 (S07) - même champ que `document_metadata_screen.dart`, éditable
+    // aussi depuis ici (`ValueNotifier` plutôt qu'un `TextEditingController`
+    // - pas de saisie libre, uniquement `showDatePicker`, voir ci-dessous).
+    final ValueNotifier<DateTime?> deliveryDateNotifier =
+        ValueNotifier<DateTime?>(incident.deliveryDate);
 
     final bool? confirmed = await showModalBottomSheet<bool>(
       context: context,
@@ -82,6 +87,44 @@ class IncidentDetailScreen extends ConsumerWidget {
                 decoration: const InputDecoration(labelText: 'Référence BL (optionnel)'),
               ),
               const SizedBox(height: RfSpacing.sm),
+              ValueListenableBuilder<DateTime?>(
+                valueListenable: deliveryDateNotifier,
+                builder: (BuildContext context, DateTime? value, Widget? child) {
+                  return Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          value == null
+                              ? 'Date du BL : non renseignée'
+                              : 'Date du BL : ${DateFormat('dd/MM/yyyy').format(value.toLocal())}',
+                          style: RfTypography.body,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final DateTime now = DateTime.now();
+                          final DateTime? picked = await showDatePicker(
+                            context: sheetContext,
+                            initialDate: value ?? now,
+                            firstDate: DateTime(now.year - 5),
+                            lastDate: now,
+                          );
+                          if (picked != null) {
+                            deliveryDateNotifier.value = picked;
+                          }
+                        },
+                        child: const Text('Choisir'),
+                      ),
+                      if (value != null)
+                        TextButton(
+                          onPressed: () => deliveryDateNotifier.value = null,
+                          child: const Text('Effacer'),
+                        ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: RfSpacing.sm),
               TextField(
                 controller: notesController,
                 maxLines: 3,
@@ -102,6 +145,7 @@ class IncidentDetailScreen extends ConsumerWidget {
     );
 
     if (confirmed != true) {
+      deliveryDateNotifier.dispose();
       return;
     }
     String? nullIfEmpty(String value) {
@@ -115,8 +159,10 @@ class IncidentDetailScreen extends ConsumerWidget {
           supplierName: nullIfEmpty(supplierController.text),
           carrierName: nullIfEmpty(carrierController.text),
           deliveryRef: nullIfEmpty(deliveryRefController.text),
+          deliveryDate: deliveryDateNotifier.value,
           notes: nullIfEmpty(notesController.text),
         );
+    deliveryDateNotifier.dispose();
     notifyDataChanged(ref);
   }
 
@@ -221,6 +267,12 @@ class _IncidentDetailBody extends ConsumerWidget {
           _InfoRow(label: 'Fournisseur', value: incident.supplierName),
           _InfoRow(label: 'Transporteur', value: incident.carrierName),
           _InfoRow(label: 'Référence BL', value: incident.deliveryRef),
+          _InfoRow(
+            label: 'Date du BL',
+            value: incident.deliveryDate == null
+                ? null
+                : DateFormat('dd/MM/yyyy').format(incident.deliveryDate!.toLocal()),
+          ),
           _InfoRow(label: 'Commentaire', value: incident.notes),
           const SizedBox(height: RfSpacing.lg),
           const Text('Type(s) de problème', style: RfTypography.sectionTitle),

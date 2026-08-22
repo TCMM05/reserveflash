@@ -2,6 +2,61 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.18] - R2 - câblage S07 "Vérifier les informations" (mobile) - 2026-08-22
+
+Neuvième lot mobile de R2. `document_metadata_screen.dart` (S07) était un
+`RfScreenStub` jamais atteint par aucune navigation
+(`AppNavigation.pushDocumentMetadata` existait mais n'était appelé nulle
+part) - le parcours nominal sautait directement de S06 (photo BL) à S08
+(type de problème).
+
+1. **Constat** : `supplierName`/`carrierName`/`deliveryRef` existent déjà
+   depuis R1 comme champs optionnels d'`Incident`, saisissables dès S05
+   (`create_incident_screen.dart`, avant même la photo du BL) et corrigeables
+   à S17 (`incident_detail_screen.dart`). Ce lot n'invente donc PAS de
+   nouveau champ pour ces trois-là - seulement le bon moment dans le
+   parcours (juste après la photo réelle du BL) pour les vérifier/corriger.
+2. **Nouveau champ `deliveryDate`** (date figurant sur le BL lui-même,
+   distincte d'`occurredAt`) - `LocalIncidents.deliveryDate` (nullable),
+   migration `v2 -> v3` additive uniquement (`m.addColumn`, aucune perte
+   possible pour une base existante, voir `app_database.dart`). Répercuté
+   dans `Incident` (entité), `IncidentRepository`/`LocalIncidentRepository`
+   (`createIncident`/`updateIncidentMetadata`), et `backup_service.dart`
+   (export/import - absent d'une sauvegarde antérieure à ce lot -> `null` à
+   l'import, jamais une erreur).
+3. **`document_metadata_screen.dart`** (S07) - écran réel : formulaire
+   fournisseur/transporteur/référence BL (pré-rempli depuis l'incident,
+   éditable) + sélecteur de date pour `deliveryDate`, "Continuer" appelle
+   `updateIncidentMetadata` puis pousse vers S08. **Décision de périmètre
+   explicite** : aucune extraction OCR/IA ici (contrairement à
+   `facts_review_screen.dart`) - la décision 4 de `docs/GATE_R2_STATUS.md`
+   exclut déjà ces champs du pipeline `CandidateFactData` (schéma
+   `candidate_fact_set.v1` inchangé) ; une OCR automatique de ces champs
+   serait une extension de périmètre distincte (nouveau schéma, nouveau
+   prompt IA backend, implications coût/benchmark), non entreprise sans
+   confirmation explicite de l'équipe.
+4. **`incident_detail_screen.dart`** (S17) étendu en cohérence : affiche et
+   permet de corriger `deliveryDate` au même titre que les trois autres
+   champs (sinon une valeur saisie à S07 aurait été invisible/non
+   corrigeable depuis le détail du dossier).
+5. **Câblage navigation** - `AppRoutes.documentMetadata`/
+   `pushDocumentMetadata` transmettent désormais `incidentId` (absent
+   jusqu'ici, l'écran stub n'en avait pas besoin) ; `document_capture_screen.dart`
+   (S06) pousse vers S07 au lieu de sauter directement à S08.
+6. **Preuve par test** : `test/data/local_incident_repository_test.dart` -
+   `deliveryDate` ajouté au test de persistance disque existant (création),
+   et nouveau test dédié pour `updateIncidentMetadata` (jusqu'ici SANS
+   AUCUNE couverture de test dans ce fichier malgré 3 écrans appelants -
+   comblé à cette occasion), y compris le cas `notes: null` (effacement
+   explicite vs "non fourni").
+
+Non couvert par ce lot (limitation connue) : pas de test terrain réel de
+S07 (nécessiterait le SDK Flutter/un appareil - voir limitation permanente
+de ce sandbox) ; pas de widget test dédié pour `document_metadata_screen.dart`
+(même précédent que `create_incident_screen.dart`/`incident_detail_screen.dart`,
+aucun des deux n'en a non plus dans ce projet - couverture via le
+repository).
+
 ## [0.3.17] - R2 - déclenchement de la file IA au retour réseau (mobile) - 2026-08-22
 
 Huitième lot mobile de R2. Comble le point "Reste à faire" documenté depuis

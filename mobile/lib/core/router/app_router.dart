@@ -91,7 +91,9 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.documentMetadata,
-      builder: (BuildContext context, GoRouterState state) => const DocumentMetadataScreen(),
+      builder: (BuildContext context, GoRouterState state) => DocumentMetadataScreen(
+        incidentId: _extraIncidentId(state),
+      ),
     ),
     GoRoute(
       path: AppRoutes.issueType,
@@ -194,7 +196,8 @@ extension AppNavigation on BuildContext {
   void pushCreateIncident() => push(AppRoutes.createIncident);
   void pushDocumentCapture(String incidentId) =>
       push(AppRoutes.documentCapture, extra: incidentId);
-  void pushDocumentMetadata() => push(AppRoutes.documentMetadata);
+  void pushDocumentMetadata(String incidentId) =>
+      push(AppRoutes.documentMetadata, extra: incidentId);
   void pushIssueType(String incidentId) => push(AppRoutes.issueType, extra: incidentId);
   void pushEvidenceCapture(String incidentId) =>
       push(AppRoutes.evidenceCapture, extra: incidentId);

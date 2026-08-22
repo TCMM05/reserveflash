@@ -372,6 +372,10 @@ class BackupService {
         'supplier_name': row.supplierName,
         'carrier_name': row.carrierName,
         'delivery_ref': row.deliveryRef,
+        // R2 (S07) - additif, voir LocalIncidents.deliveryDate. Absent dans
+        // toute sauvegarde produite avant ce lot -> `null` à l'import, jamais
+        // une erreur (voir `_incidentFromJson` ci-dessous).
+        'delivery_date': row.deliveryDate?.toIso8601String(),
         'notes': row.notes,
         'pending_server_id': row.pendingServerId,
         'archived': row.archived,
@@ -461,6 +465,14 @@ class BackupService {
       supplierName: Value<String?>(row['supplier_name'] as String?),
       carrierName: Value<String?>(row['carrier_name'] as String?),
       deliveryRef: Value<String?>(row['delivery_ref'] as String?),
+      // R2 (S07) - absent des sauvegardes produites avant ce lot (clé
+      // manquante du JSON) : `row['delivery_date']` vaut alors `null`,
+      // traité exactement comme un champ jamais renseigné (voir docstring
+      // `_incidentToJson` ci-dessus) - une restauration d'ancienne
+      // sauvegarde reste toujours possible, sans erreur.
+      deliveryDate: Value<DateTime?>(
+        row['delivery_date'] == null ? null : DateTime.parse(row['delivery_date'] as String),
+      ),
       notes: Value<String?>(row['notes'] as String?),
       pendingServerId: Value<bool>(row['pending_server_id'] as bool? ?? false),
       archived: Value<bool>(row['archived'] as bool? ?? false),

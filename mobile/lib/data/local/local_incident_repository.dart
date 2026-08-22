@@ -57,6 +57,7 @@ final class LocalIncidentRepository implements IncidentRepository {
     String? supplierName,
     String? carrierName,
     String? deliveryRef,
+    DateTime? deliveryDate,
     String? notes,
   }) async {
     final String id = _uuid.v4();
@@ -70,6 +71,7 @@ final class LocalIncidentRepository implements IncidentRepository {
             supplierName: Value<String?>(supplierName),
             carrierName: Value<String?>(carrierName),
             deliveryRef: Value<String?>(deliveryRef),
+            deliveryDate: Value<DateTime?>(deliveryDate),
             notes: Value<String?>(notes),
           ),
         );
@@ -81,6 +83,7 @@ final class LocalIncidentRepository implements IncidentRepository {
       supplierName: supplierName,
       carrierName: carrierName,
       deliveryRef: deliveryRef,
+      deliveryDate: deliveryDate,
       notes: notes,
     );
   }
@@ -129,6 +132,7 @@ final class LocalIncidentRepository implements IncidentRepository {
     String? supplierName,
     String? carrierName,
     String? deliveryRef,
+    DateTime? deliveryDate,
     String? notes,
   }) async {
     await (_db.update(_db.localIncidents)..where((t) => t.id.equals(incidentId))).write(
@@ -137,6 +141,7 @@ final class LocalIncidentRepository implements IncidentRepository {
         supplierName: Value<String?>(supplierName),
         carrierName: Value<String?>(carrierName),
         deliveryRef: Value<String?>(deliveryRef),
+        deliveryDate: Value<DateTime?>(deliveryDate),
         notes: Value<String?>(notes),
       ),
     );
@@ -190,6 +195,7 @@ final class LocalIncidentRepository implements IncidentRepository {
       supplierName: row.supplierName,
       carrierName: row.carrierName,
       deliveryRef: row.deliveryRef,
+      deliveryDate: row.deliveryDate,
       notes: row.notes,
       archived: row.archived,
     );

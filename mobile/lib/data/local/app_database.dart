@@ -64,6 +64,12 @@ class LocalIncidents extends Table {
   TextColumn get supplierName => text().nullable()();
   TextColumn get carrierName => text().nullable()();
   TextColumn get deliveryRef => text().nullable()();
+  // v3 (R2, `document_metadata_screen.dart` / S07) - date figurant sur le
+  // bon de livraison lui-même, distincte d'`occurredAt` (date/heure de
+  // l'incident, saisie automatiquement à S05, avant même que le BL ait été
+  // photographié). Nullable : champ optionnel, renseigné (ou corrigé) une
+  // fois le BL réellement en main à S07, jamais bloquant.
+  DateTimeColumn get deliveryDate => dateTime().nullable()();
   TextColumn get notes => text().nullable()();
   // Conservé pour compatibilité future (point 12) ; en V1, toujours `true`
   // car aucun ID serveur n'est jamais attribué.
@@ -332,8 +338,12 @@ class AppDatabase extends _$AppDatabase {
   //               AiOperationQueue (portée réduite : IA uniquement, voir
   //               docstring ci-dessus). Voir
   //               docs/local_storage_schema.md pour le détail migration.
+  //   v3 (R2)   : câblage S07 (`document_metadata_screen.dart`) - ajout de
+  //               `LocalIncidents.deliveryDate` (nullable, additive
+  //               uniquement - aucune colonne renommée/supprimée, aucune
+  //               perte possible pour une base v1 ou v2 existante).
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -372,6 +382,11 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(localEvidenceAssets);
             await m.createTable(aiOperationQueue);
             await m.createTable(backupEvents);
+          }
+          if (from < 3) {
+            // v2 -> v3 (R2, câblage S07) : ajout simple d'une colonne
+            // nullable, aucune perte de données existantes (NFR-10).
+            await m.addColumn(localIncidents, localIncidents.deliveryDate);
           }
         },
       );

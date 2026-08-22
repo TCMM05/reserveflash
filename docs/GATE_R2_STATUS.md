@@ -64,10 +64,15 @@ corrigée.
    BL (fournisseur, transporteur, référence BL, date) n'y figurent pas et ne
    sont pas ajoutées à ce schéma v1 (une évolution de schéma versionné suit
    une politique de changement dédiée - voir `schemas/README.md`) : elles
-   sont destinées à l'écran déjà scaffoldé mais vide `S07`
+   sont destinées à l'écran `S07`
    (`mobile/lib/features/document_capture/presentation/document_metadata_screen.dart`),
-   distinct du flux `CandidateFactSet` de l'incident. Cette séparation reste
-   à confirmer/implémenter côté mobile (non commencé).
+   distinct du flux `CandidateFactSet` de l'incident. Câblé (`[0.3.18]`,
+   voir "Avancement réel" ci-dessous) - purement manuel (saisie/correction),
+   AUCUNE extraction OCR/IA pour ces champs dans ce lot (décision confirmée
+   par ce câblage, pas seulement en attente) : une OCR automatique de ces
+   champs resterait une extension de périmètre distincte à confirmer
+   explicitement avec l'équipe avant d'être entreprise (nouveau schéma,
+   nouveau prompt IA backend, implications coût/benchmark).
 
 ## Avancement réel (vérifié par exécution, pas par relecture de code)
 
@@ -267,12 +272,24 @@ corrigée.
     câblage) ; `reserve_screen_test.dart` couvre séparément l'affichage réel
     de `ReserveScreen` en l'atteignant directement, sans navigation - même
     limite déjà documentée pour l'audio dans `evidence_viewer_test.dart`.
+  - `document_metadata_screen.dart` (S07, `[0.3.18]`) - écran réel
+    (fournisseur/transporteur/référence BL/date du BL, tous optionnels),
+    câblé entre S06 et S08 dans le parcours nominal (avant ce lot :
+    orphelin, jamais atteint par aucune navigation). `deliveryDate`
+    (nouveau champ, migration `v2 -> v3` additive) répercuté aussi dans
+    `incident_detail_screen.dart` (S17) pour rester corrigeable après
+    coup. Preuve par test : `test/data/local_incident_repository_test.dart`
+    (persistance de `deliveryDate`, et nouveau test dédié pour
+    `updateIncidentMetadata` - jusqu'ici sans aucune couverture malgré 3
+    écrans appelants). Pas de widget test dédié pour cet écran (même
+    précédent que `create_incident_screen.dart`/`incident_detail_screen.dart`)
+    ni de test terrain réel à ce stade.
 - **Reste à faire** :
   - Test terrain réel du déclenchement au retour réseau (`[0.3.17]`, câblé
     ce lot mais jamais exercé sur un vrai appareil/émulateur - nécessite de
     couper/rétablir le réseau pendant qu'un item reste `pending`).
-  - `document_metadata_screen.dart` (S07, métadonnées BL - voir décision 4
-    ci-dessus).
+  - Test terrain réel de S07 (`[0.3.18]`, câblé ce lot mais jamais exercé
+    sur un vrai appareil/émulateur).
   - `final_document_screen.dart` (S13, photo du document complété) - reste
     un `RfScreenStub`, explicitement hors périmètre R1 (F13/F14).
 
@@ -469,10 +486,11 @@ Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 
 ## Prochaines étapes
 
-1. Mobile : `document_metadata_screen.dart` (S07) reste à faire. Déclenchement
-   de la file au retour réseau : FAIT (`[0.3.17]`, voir "Avancement réel"
-   ci-dessus) mais PAS encore testé en conditions réelles - reste ce test
-   terrain. Écran de revue réel et bascule
+1. Mobile : `document_metadata_screen.dart` (S07) : FAIT (`[0.3.18]`, voir
+   "Avancement réel" ci-dessus) mais PAS encore testé en conditions
+   réelles. Déclenchement de la file au retour réseau : FAIT (`[0.3.17]`,
+   voir "Avancement réel" ci-dessus) mais PAS encore testé en conditions
+   réelles non plus - reste ces deux tests terrain. Écran de revue réel et bascule
    manuelle/UNKNOWN sur disjoncteur de retry : FAIT (`[0.3.6]`, voir section
    "Avancement réel" ci-dessus). OCR (ML Kit) sur le BL : FAIT et **validé en
    conditions réelles avec un résultat correctement rempli** (`[0.3.9]` à

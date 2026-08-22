@@ -26,10 +26,12 @@ import 'package:reserveflash/features/common/presentation/missing_incident_view.
 /// `document_capture_screen.dart`, que l'extraction OCR+IA du bon de
 /// livraison est mise en file au mieux-effort (voir
 /// `_enqueueOcrExtractionBestEffort` ci-dessous). Dans le parcours nominal
-/// (S06 documentCapture -> S08 issueType -> ...), AUCUNE `Issue` n'existe
-/// encore au moment de la capture du document (`Issue` n'est créée qu'ici,
-/// à la confirmation du type de problème) - une tentative de mise en file
-/// depuis S06 y était donc systématiquement un no-op silencieux dans le
+/// (S06 documentCapture -> S07 documentMetadata -> S08 issueType -> ...),
+/// AUCUNE `Issue` n'existe encore au moment de la capture du document
+/// (`Issue` n'est créée qu'ici, à la confirmation du type de problème) - S07
+/// n'en crée pas non plus (voir `document_metadata_screen.dart`) - une
+/// tentative de mise en file depuis S06 y était donc systématiquement un
+/// no-op silencieux dans le
 /// parcours normal (l'IA ne trouvait jamais de "Non détecté" pour cause
 /// d'erreur, mais parce que l'opération n'avait tout simplement jamais été
 /// créée). `enqueueAiOperation` est idempotent par clé (voir

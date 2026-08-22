@@ -43,6 +43,7 @@ abstract interface class IncidentRepository {
     String? supplierName,
     String? carrierName,
     String? deliveryRef,
+    DateTime? deliveryDate,
     String? notes,
   });
 
@@ -69,6 +70,7 @@ abstract interface class IncidentRepository {
     String? supplierName,
     String? carrierName,
     String? deliveryRef,
+    DateTime? deliveryDate,
     String? notes,
   });
 
