@@ -23,6 +23,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -89,6 +90,19 @@ final Provider<OcrService> ocrServiceProvider =
 /// jamais requis pour la capture locale, section 8.1). `baseUrl` vient de
 /// `lib/core/config/backend_config.dart` - jamais codé en dur ici.
 final Provider<Dio> dioProvider = Provider<Dio>((ref) {
+  // DIAGNOSTIC (voir consigne "toujours logger les branches
+  // silencieuses/best-effort") : `backendBaseUrl` vient d'une constante de
+  // compilation (`String.fromEnvironment`, voir `backend_config.dart`) -
+  // silencieuse par nature, aucun moyen de vérifier a posteriori quelle
+  // valeur un build donné utilise réellement (ex : `--dart-define` oublié
+  // par erreur sur un run, build réinstallé sans rebuild). Un échec réseau
+  // "Connection refused" alors que TOUT le reste (serveur, pare-feu, IP)
+  // est confirmé correct est indiscernable, sans ce log, d'un build qui
+  // pointe encore vers l'ancienne valeur par défaut (`10.0.2.2`, valide
+  // uniquement pour l'émulateur Android).
+  if (kDebugMode) {
+    debugPrint('[RF][config] backendBaseUrl utilisé par ce build : $backendBaseUrl');
+  }
   return Dio(
     BaseOptions(
       baseUrl: backendBaseUrl,

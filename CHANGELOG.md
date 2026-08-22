@@ -2,6 +2,39 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.25] - R2 - log diagnostic sur l'URL backend réellement utilisée par le build (test terrain en cours) - 2026-08-22
+
+Suite au log `[RF][ai-queue]` ajouté en `[0.3.24]` : la cause exacte
+remontée sur le terrain est `connectionError: Connection refused` (pas un
+timeout, pas une erreur cleartext/TLS) - un vrai refus TCP, ce qui écarte
+l'hypothèse "rien n'écoute" (confirmée par `netstat -ano | findstr :8000`
+montrant bien `0.0.0.0:8000 LISTENING` côté PC) et l'hypothèse "mauvaise IP
+du PC" (confirmée inchangée par l'utilisateur). Test de dissociation
+supplémentaire : au même instant qu'un échec applicatif, le NAVIGATEUR du
+téléphone joint `http://192.168.1.42:8000/health` sans problème (200 OK) -
+donc le chemin réseau téléphone -> PC:8000 fonctionne en général, seule
+l'appli échoue.
+
+Angle mort identifié : `AiUnavailableException`
+(`mobile/lib/data/remote/ai_api_client.dart`) n'inclut dans son message que
+le chemin de la route (`/v1/ai/extract`), jamais l'hôte/port réellement
+utilisé - impossible de confirmer depuis les logs actuels si le build
+testé utilise bien `http://192.168.1.42:8000` (passé via
+`--dart-define=RESERVEFLASH_BACKEND_BASE_URL=...`) ou est resté sur la
+valeur par défaut `http://10.0.2.2:8000` (valide seulement pour
+l'émulateur - un `--dart-define` oublié sur un run, ou une appli
+réinstallée sans rebuild, donnerait exactement les mêmes symptômes que
+ceux observés, `String.fromEnvironment` étant une constante de
+compilation).
+
+**Correctif (diagnostic uniquement)** : nouveau log
+`[RF][config] backendBaseUrl utilisé par ce build : ...` dans
+`mobile/lib/core/providers/app_providers.dart` (`dioProvider`), imprimé une
+fois au démarrage de l'app - permet de confirmer avec certitude, avant tout
+autre test, quelle URL de base le build actuellement installé utilise
+réellement. Non testé/compilé dans ce bac à sable (pas de SDK Flutter ici)
+- à valider par l'utilisateur avec `flutter run` + `flutter logs`.
+
 ## [0.3.24] - R2 - log diagnostic pour échec IA silencieux sur appareil physique (test terrain en cours) - 2026-08-22
 
 Pendant le premier test terrain sur appareil Android physique avec un vrai
