@@ -38,11 +38,15 @@ import 'package:reserveflash/features/common/presentation/missing_incident_view.
 /// SEULE la photo "Étiquette / référence" (la plus susceptible de contenir
 /// du texte utile - contrairement à une vue générale ou un gros plan de
 /// dommage) déclenche une mise en file OCR+IA au mieux-effort, et
-/// uniquement si aucun `CandidateFactSet` n'existe encore pour l'anomalie
-/// (voir `_enqueueOcrExtractionBestEffort` ci-dessous) - pour ne jamais
-/// écraser silencieusement un résultat déjà obtenu par ailleurs (bon de
-/// livraison à S06/S08, note vocale à S10) par un résultat moins bon issu
-/// d'une simple photo d'étiquette. Cette anomalie existe forcément à ce
+/// uniquement si aucun `CandidateFactSet` UTILE (au moins un champ) n'existe
+/// encore pour l'anomalie (voir `_enqueueOcrExtractionBestEffort`
+/// ci-dessous) - pour ne jamais écraser silencieusement un résultat déjà
+/// obtenu par ailleurs (bon de livraison à S06/S08, note vocale à S10) par
+/// un résultat moins bon issu d'une simple photo d'étiquette. Un
+/// `CandidateFactSet` VIDE (`fields: {}` - ex : OCR du BL n'ayant rien
+/// reconnu) ne compte PAS comme "déjà obtenu" (bug corrigé en R2, voir
+/// CHANGELOG) : bloquer sur la simple existence, vide ou non, empêchait à
+/// tort toute deuxième tentative via la photo. Cette anomalie existe forcément à ce
 /// stade (S08 la crée, S09 vient après - contrairement au bug corrigé pour
 /// S06, voir `issue_type_screen.dart`).
 class EvidenceCaptureScreen extends ConsumerStatefulWidget {
@@ -127,20 +131,33 @@ class _EvidenceCaptureScreenState extends ConsumerState<EvidenceCaptureScreen> {
       }
       final String issueId = issues.first.id;
       // Garde-fou coût/qualité (voir docstring de fichier) : ne jamais
-      // écraser un CandidateFactSet déjà obtenu (BL, note vocale) par un
+      // écraser un CandidateFactSet déjà UTILE (au moins un champ) par un
       // résultat potentiellement moins bon issu d'une simple photo
-      // d'étiquette.
+      // d'étiquette. Bug corrigé (retour terrain, R2, 2026-08, voir
+      // CHANGELOG) : la version initiale bloquait sur la simple EXISTENCE
+      // d'un `CandidateFactSet`, y compris un résultat VIDE (`fields: {}` -
+      // ex : OCR du BL n'ayant rien reconnu sur une photo illisible) - ce
+      // qui empêchait à tort toute deuxième tentative via la photo
+      // d'étiquette alors que le premier résultat n'apportait rien.
       final domain.CandidateFactSet? existing =
           await ref.read(incidentRepositoryProvider).latestCandidateFactSet(issueId);
-      if (existing != null) {
+      if (existing != null && existing.candidateData.fields.isNotEmpty) {
         if (kDebugMode) {
           debugPrint(
-            '[RF][extractFromPhoto] CandidateFactSet déjà présent pour '
-            'issue $issueId (id=${existing.id}) - mise en file annulée '
-            'pour ne pas écraser un résultat déjà obtenu.',
+            '[RF][extractFromPhoto] CandidateFactSet UTILE déjà présent pour '
+            'issue $issueId (id=${existing.id}, ${existing.candidateData.fields.length} '
+            'champ(s)) - mise en file annulée pour ne pas écraser un résultat '
+            'déjà obtenu.',
           );
         }
         return;
+      }
+      if (existing != null && kDebugMode) {
+        debugPrint(
+          '[RF][extractFromPhoto] CandidateFactSet existant pour issue '
+          '$issueId (id=${existing.id}) mais VIDE (0 champ) - tentative via '
+          'la photo quand même.',
+        );
       }
       final ExtractFromPhotoPayload payload =
           ExtractFromPhotoPayload(evidenceAssetId: asset.id);

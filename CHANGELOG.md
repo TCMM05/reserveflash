@@ -2,6 +2,40 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.15] - R2 - correctif : le garde-fou extractFromPhoto bloquait sur un résultat VIDE - 2026-08-20
+
+Premier test terrain d'`extractFromPhoto` (`[0.3.13]`), diagnostiqué
+immédiatement grâce aux logs `[RF]` ajoutés en `[0.3.14]` (aucun aller-retour
+de debug nécessaire cette fois) :
+
+1. `[RF][extractFromDocument] mise en file ...` - le BL avait finalement été
+   photographié (pas sauté comme suggéré pour le test) -> `extractFromDocument`
+   mis en file à S08.
+2. `[RF][OCR] ... -> (vide)` - l'OCR n'a lu AUCUN texte sur cette photo de BL.
+3. Le backend a quand même répondu `200 OK` et un `CandidateFactSet` **VIDE**
+   (`fields: {}`, aucun champ) a été persisté - comportement correct en soi
+   (rien à extraire d'un texte vide).
+4. `[RF][extractFromPhoto] CandidateFactSet déjà présent ... mise en file
+   annulée` - le garde-fou ajouté en `[0.3.13]` ("ne pas écraser un résultat
+   déjà bon") a bloqué la tentative sur la photo "Étiquette / référence" à
+   tort : il vérifiait la simple EXISTENCE d'un `CandidateFactSet`, pas s'il
+   contenait quoi que ce soit d'utile. Un résultat vide n'est PAS "déjà
+   obtenu" - il ne devrait jamais empêcher une deuxième tentative.
+
+**Correctif** (`evidence_capture_screen.dart::_enqueueOcrExtractionBestEffort`) :
+la condition passe de `existing != null` à
+`existing != null && existing.candidateData.fields.isNotEmpty` - un
+`CandidateFactSet` vide n'empêche plus la mise en file `extractFromPhoto`.
+Log `[RF]` ajusté en conséquence (distingue désormais "résultat UTILE déjà
+présent, annulé" de "résultat VIDE existant, tentative quand même").
+
+Note honnête : ce garde-fou (comme les deux autres points de mise en file
+best-effort, S06/S08) n'a pas de test automatisé dédié à ce stade - seul
+`ai_queue_processor_test.dart` (le processeur lui-même) est couvert par
+test ; la logique de déclenchement écran-par-écran reste vérifiée par
+lecture attentive + test terrain uniquement (limitation connue, voir
+`docs/GATE_R2_STATUS.md`).
+
 ## [0.3.14] - R2 - logs de diagnostic permanents sur le pipeline IA (retour terrain) - 2026-08-20
 
 Le test terrain d'`extractFromPhoto` (`[0.3.13]`) a échoué sans erreur

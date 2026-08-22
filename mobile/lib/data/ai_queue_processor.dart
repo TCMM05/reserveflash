@@ -566,8 +566,9 @@ final class AiQueueProcessor {
   /// gratuit/pas de découpage en deux étapes - voir docstring de
   /// [ExtractFromPhotoPayload]). Le garde-fou "ne pas écraser un résultat
   /// déjà bon" (une seule photo guidée déclenche cette mise en file, et
-  /// seulement si aucun `CandidateFactSet` n'existe encore) est appliqué
-  /// côté écran, AVANT la mise en file (voir
+  /// seulement si aucun `CandidateFactSet` UTILE - au moins un champ - n'existe
+  /// encore, un résultat VIDE ne comptant pas comme "déjà obtenu") est
+  /// appliqué côté écran, AVANT la mise en file (voir
   /// `evidence_capture_screen.dart::_enqueueOcrExtractionBestEffort`) -
   /// volontairement pas ici, pour que ce processeur reste agnostique de la
   /// politique de déclenchement de chaque écran appelant (même principe que
