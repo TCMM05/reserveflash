@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -122,6 +123,12 @@ class _IssueTypeScreenState extends ConsumerState<IssueTypeScreen> {
         }
       }
       if (deliveryDoc == null) {
+        if (kDebugMode) {
+          debugPrint(
+            '[RF][extractFromDocument] aucune photo de bon de livraison pour '
+            'incident ${widget.incidentId} - mise en file annulée.',
+          );
+        }
         return;
       }
       final ExtractFromDocumentPayload payload =
@@ -141,12 +148,38 @@ class _IssueTypeScreenState extends ConsumerState<IssueTypeScreen> {
               sourceHash: sourceHash,
             ),
           );
+      if (kDebugMode) {
+        debugPrint(
+          '[RF][extractFromDocument] mise en file pour asset ${deliveryDoc.id} '
+          '(issue $firstIssueId, sourceHash=$sourceHash).',
+        );
+      }
       // Déclenchement "online" au mieux-effort - si l'OCR/extraction échoue
       // maintenant (réseau, quota IA...), l'item reste `pending` en base et
       // sera retenté par un prochain appel à ce même processeur (ex : écran
-      // de revue des faits) - jamais une perte.
-      unawaited(ref.read(aiQueueProcessorProvider).processPendingOperations());
-    } catch (_) {
+      // de revue des faits) - jamais une perte. `.then()` (plutôt qu'un
+      // `await` qui bloquerait ce best-effort) pour logguer le résultat sans
+      // changer le caractère non-bloquant de cet appel.
+      unawaited(
+        ref.read(aiQueueProcessorProvider).processPendingOperations().then((
+          AiQueueProcessingSummary summary,
+        ) {
+          if (kDebugMode) {
+            debugPrint(
+              '[RF][extractFromDocument] traitement terminé : '
+              'succeeded=${summary.succeeded} failed=${summary.failed} '
+              'skipped=${summary.skipped}.',
+            );
+          }
+        }),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          '[RF][extractFromDocument] EXCEPTION best-effort (avalée, jamais '
+          'affichée à l\'utilisateur) : $e',
+        );
+      }
       // Best-effort explicite (voir docstring de fichier) : aucune erreur
       // affichée à l'utilisateur pour cette étape optionnelle.
     }

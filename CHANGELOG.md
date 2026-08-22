@@ -2,6 +2,48 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.14] - R2 - logs de diagnostic permanents sur le pipeline IA (retour terrain) - 2026-08-20
+
+Le test terrain d'`extractFromPhoto` (`[0.3.13]`) a échoué sans erreur
+visible à l'écran - retour explicite de l'utilisateur : désormais, TOUJOURS
+insérer des logs de diagnostic AVANT de tester une fonctionnalité, pas
+seulement après un échec constaté (jusqu'ici les diagnostics `[0.3.7]`
+(filename Whisper) et `[0.3.11]` (texte OCR manuscrit) avaient chacun exigé
+d'ajouter un `print` temporaire puis de le retirer une fois la cause
+trouvée - un cycle coûteux répété à chaque nouveau bug).
+
+Ce lot remplace ce cycle par des logs PERMANENTS (jamais retirés après
+usage, contrairement aux lots précédents) sur tous les points du pipeline
+IA qui sont silencieux par conception (politique "jamais d'erreur affichée
+pour une étape optionnelle" - un échec ou un no-op y est donc indiscernable
+d'un succès depuis l'écran seul) :
+
+1. **Mobile** - `debugPrint('[RF][<opération>] ...')`, gardé par
+   `kDebugMode` (éliminé par tree-shaking en release, coût nul en
+   production) : `lib/data/local/ocr_service.dart` (texte OCR réellement
+   reconnu - le point qui a permis de diagnostiquer `[0.3.11]`),
+   `document_capture_screen.dart`, `issue_type_screen.dart`,
+   `evidence_capture_screen.dart` (chaque branche de décision de
+   `_enqueueOcrExtractionBestEffort` : anomalie absente, `CandidateFactSet`
+   déjà présent, mise en file, résumé succeeded/failed/skipped du
+   traitement, exception avalée). Voir `mobile/README.md`, section "Logs de
+   diagnostic `[RF]`" pour la commande `flutter logs | Select-String
+   "\[RF\]"` qui les isole du bruit des logs Android natifs.
+2. **Backend** - `logging.getLogger(__name__).warning(...)` PERMANENT (pas
+   un `print` temporaire) dans `openai_provider.py::_raise_for_provider_errors`,
+   couvrant TOUS les statuts d'erreur OpenAI (429, 5xx, autres 4xx) avec le
+   corps de réponse complet (jamais la clé API, absente de ce corps) -
+   remplace définitivement le cycle observé en `[0.3.7]`(debug 6b6b89e)/
+   429(debug d58864e) d'ajout puis retrait d'un `print` à chaque nouveau
+   diagnostic. Visible par défaut dans le terminal `uvicorn` (aucune
+   configuration `logging` supplémentaire nécessaire).
+
+Aucun changement de comportement fonctionnel - uniquement de la
+journalisation, vérifiée par les tests backend existants (`pytest`,
+12/12 passés sur `test_openai_provider.py`) et par lecture attentive côté
+mobile (non compilé dans ce sandbox, comme toujours - voir
+`mobile/README.md`).
+
 ## [0.3.13] - R2 - OCR on-device (ML Kit) sur preuve photo générique (mobile) - 2026-08-20
 
 Septième lot mobile de R2. Étend le lot OCR BL (`[0.3.9]`, validé terrain en

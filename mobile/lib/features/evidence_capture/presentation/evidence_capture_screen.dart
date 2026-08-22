@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -104,11 +105,24 @@ class _EvidenceCaptureScreenState extends ConsumerState<EvidenceCaptureScreen> {
   /// effort explicite (même politique que partout ailleurs dans le pipeline
   /// IA) : jamais d'erreur affichée pour cette étape optionnelle, jamais un
   /// blocage de la capture (déjà écrite sur disque avant cet appel).
+  ///
+  /// Logs `[RF][extractFromPhoto]` PERMANENTS en debug uniquement
+  /// (`kDebugMode`, coût nul en release) à chaque branche de décision - la
+  /// même politique best-effort "aucune erreur affichée" rend ce chemin
+  /// silencieux pour l'utilisateur PAR CONCEPTION, donc invisible sans ces
+  /// logs en cas de souci pendant un test terrain (voir
+  /// `mobile/README.md`).
   Future<void> _enqueueOcrExtractionBestEffort(domain.EvidenceAsset asset) async {
     try {
       final List<domain.Issue> issues =
           await ref.read(incidentRepositoryProvider).listIssues(widget.incidentId);
       if (issues.isEmpty) {
+        if (kDebugMode) {
+          debugPrint(
+            '[RF][extractFromPhoto] aucune anomalie pour incident '
+            '${widget.incidentId} - mise en file annulée.',
+          );
+        }
         return;
       }
       final String issueId = issues.first.id;
@@ -119,6 +133,13 @@ class _EvidenceCaptureScreenState extends ConsumerState<EvidenceCaptureScreen> {
       final domain.CandidateFactSet? existing =
           await ref.read(incidentRepositoryProvider).latestCandidateFactSet(issueId);
       if (existing != null) {
+        if (kDebugMode) {
+          debugPrint(
+            '[RF][extractFromPhoto] CandidateFactSet déjà présent pour '
+            'issue $issueId (id=${existing.id}) - mise en file annulée '
+            'pour ne pas écraser un résultat déjà obtenu.',
+          );
+        }
         return;
       }
       final ExtractFromPhotoPayload payload =
@@ -137,12 +158,38 @@ class _EvidenceCaptureScreenState extends ConsumerState<EvidenceCaptureScreen> {
               sourceHash: sourceHash,
             ),
           );
+      if (kDebugMode) {
+        debugPrint(
+          '[RF][extractFromPhoto] mise en file pour asset ${asset.id} '
+          '(issue $issueId, sourceHash=$sourceHash).',
+        );
+      }
       // Déclenchement "online" au mieux-effort - si l'OCR/extraction échoue
       // maintenant (réseau, quota IA...), l'item reste `pending` en base et
       // sera retenté par un prochain appel à ce même processeur (ex : écran
-      // de revue des faits) - jamais une perte.
-      unawaited(ref.read(aiQueueProcessorProvider).processPendingOperations());
-    } catch (_) {
+      // de revue des faits) - jamais une perte. `.then()` (plutôt qu'un
+      // `await` qui bloquerait ce best-effort) pour logguer le résultat sans
+      // changer le caractère non-bloquant de cet appel.
+      unawaited(
+        ref.read(aiQueueProcessorProvider).processPendingOperations().then((
+          AiQueueProcessingSummary summary,
+        ) {
+          if (kDebugMode) {
+            debugPrint(
+              '[RF][extractFromPhoto] traitement terminé : '
+              'succeeded=${summary.succeeded} failed=${summary.failed} '
+              'skipped=${summary.skipped}.',
+            );
+          }
+        }),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          '[RF][extractFromPhoto] EXCEPTION best-effort (avalée, jamais '
+          'affichée à l\'utilisateur) : $e',
+        );
+      }
       // Best-effort explicite (voir docstring de fichier) : aucune erreur
       // affichée à l'utilisateur pour cette étape optionnelle.
     }

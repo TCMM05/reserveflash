@@ -30,6 +30,7 @@ Comportement conforme à la demande de démarrage R2, section "Échec IA" :
 from __future__ import annotations
 
 import json
+import logging
 import time
 from pathlib import Path
 
@@ -42,6 +43,15 @@ from app.domain.errors import AIInvalidOutputError, AIRateLimitedError, AIUnavai
 from app.domain.fact_set import CandidateFactData
 
 PROVIDER_NAME = "openai"
+
+# Journalisation PERMANENTE (pas un print temporaire retiré après usage) -
+# retour d'expérience terrain (R2, 2026-08) : plusieurs diagnostics
+# (filename Whisper, 429 quota vs rate-limit) ont nécessité d'ajouter puis
+# retirer un print() à chaque fois. `logger.warning` ci-dessous couvre tous
+# les statuts d'erreur OpenAI une fois pour toutes - visible par défaut dans
+# les logs `uvicorn` (configuration standard `logging`, niveau WARNING),
+# jamais la clé API (le corps de réponse OpenAI ne la contient jamais).
+logger = logging.getLogger(__name__)
 
 # prompts/ est au niveau racine du dépôt, backend/ est un sous-dossier -
 # voir prompts/README.md : "fichiers nommés <usage>_<langue>_v<N>.txt".
@@ -294,16 +304,36 @@ class OpenAIProvider(AIProvider):
     @staticmethod
     def _raise_for_provider_errors(response: httpx.Response, *, context: str) -> None:
         if response.status_code == httpx.codes.TOO_MANY_REQUESTS:
+            logger.warning(
+                "OpenAI 429 (%s) - rate-limit OU quota/spend-limit, corps : %s",
+                context,
+                response.text,
+            )
             raise AIRateLimitedError(f"OpenAI a limité le débit ({context}).")
         if response.status_code >= 500:
+            logger.warning(
+                "OpenAI %s indisponible (%s), corps : %s",
+                response.status_code,
+                context,
+                response.text,
+            )
             raise AIUnavailableError(
                 f"OpenAI indisponible ({context}), statut {response.status_code}."
             )
         if response.status_code >= 400:
             # 4xx hors 429 = erreur de requête (mauvaise clé, payload
             # invalide côté nous) - traitée comme indisponibilité côté
-            # utilisateur final (jamais de détail de clé/API exposé), mais
-            # distincte d'un JSON de sortie invalide.
+            # utilisateur final (jamais de détail de clé/API exposé côté
+            # exception levée), mais distincte d'un JSON de sortie invalide.
+            # Le corps de réponse OpenAI est journalisé (jamais la clé
+            # elle-même) pour permettre un diagnostic sans avoir à ajouter un
+            # print temporaire à chaque fois.
+            logger.warning(
+                "OpenAI %s rejeté (%s), corps : %s",
+                response.status_code,
+                context,
+                response.text,
+            )
             raise AIUnavailableError(
                 f"OpenAI a rejeté la requête ({context}), statut {response.status_code}."
             )

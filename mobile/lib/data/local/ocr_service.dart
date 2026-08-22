@@ -21,6 +21,7 @@
 /// docstring pour la justification complète de ce principe).
 library;
 
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 abstract interface class OcrService {
@@ -66,6 +67,19 @@ final class MlKitOcrService implements OcrService {
     try {
       final InputImage inputImage = InputImage.fromFilePath(imagePath);
       final RecognizedText recognizedText = await recognizer.processImage(inputImage);
+      // Log PERMANENT en debug uniquement (jamais en release - `kDebugMode`
+      // est éliminé du binaire par tree-shaking, coût nul en production) -
+      // retour d'expérience terrain (R2, 2026-08) : ce point précis (texte
+      // réellement lu par ML Kit) est celui qui a permis de distinguer un
+      // "Non détecté" légitime (texte reconnu mais erroné/manuscrit) d'un
+      // vrai bug de câblage, sans quoi chaque diagnostic exigeait d'ajouter
+      // puis retirer un print à la main. Voir `mobile/README.md` pour la
+      // commande `flutter logs | Select-String "[RF]"` qui l'isole du bruit
+      // logcat.
+      if (kDebugMode) {
+        final String preview = recognizedText.text.isEmpty ? '(vide)' : recognizedText.text;
+        debugPrint('[RF][OCR] $imagePath -> $preview');
+      }
       return recognizedText.text;
     } finally {
       await recognizer.close();

@@ -100,6 +100,39 @@ pas un bug de câblage OCR). Pour un test terrain propre du pipeline OCR de
 bout en bout, préférer du texte IMPRIMÉ/tapé (affiché en gros sur un écran,
 ou un vrai bon de livraison papier) plutôt que manuscrit.
 
+## Logs de diagnostic `[RF]` - pipeline IA (R2)
+
+Convention adoptée après plusieurs allers-retours de debug terrain (2026-08,
+voir CHANGELOG) : chaque point de mise en file IA best-effort
+(`document_capture_screen.dart`, `issue_type_screen.dart`,
+`evidence_capture_screen.dart`, `voice_description_screen.dart`) et l'OCR
+lui-même (`lib/data/local/ocr_service.dart`) émettent un `debugPrint`
+préfixé `[RF][<nom_opération>]` à chaque branche de décision (annulé/mis en
+file/résultat/exception). Toujours actifs en mode debug, coût nul en
+release (`kDebugMode`, éliminé par tree-shaking - jamais dans un APK de
+production).
+
+Ces chemins sont volontairement SILENCIEUX pour l'utilisateur (politique
+"jamais d'erreur affichée pour une étape optionnelle") - sans ces logs, un
+échec ou un no-op silencieux (ex : mise en file annulée car aucune anomalie
+n'existe encore) est indiscernable d'un succès depuis l'écran seul. En cas
+de test qui "ne marche pas" sans erreur visible, TOUJOURS commencer par
+regarder ces logs avant d'émettre une hypothèse.
+
+Pour les isoler du bruit des logs Android natifs (caméra, EGL, etc.) :
+
+```
+flutter logs | Select-String "\[RF\]"
+```
+
+(ou `flutter run | Tee-Object -FilePath run.log` dans un terminal puis
+`Get-Content run.log -Wait | Select-String "\[RF\]"` dans un second, si
+`flutter logs` seul ne réaffiche pas les logs déjà émis). Backend : les
+erreurs OpenAI (429, 5xx, autres 4xx) sont journalisées en permanence via
+`logging.getLogger` (`app/infrastructure/ai/openai_provider.py`, niveau
+WARNING) - visibles par défaut dans le terminal `uvicorn`, sans avoir besoin
+d'ajouter un `print` temporaire à chaque diagnostic.
+
 Si une de ces commandes échoue à cause d'une erreur de syntaxe dans le code
 écrit ici, c'est un bug de cette baseline à corriger en priorité (Gate R0.1 -
 voir la liste des 11 critères dans le CHANGELOG.md).
