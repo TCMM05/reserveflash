@@ -2,6 +2,71 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.17] - R2 - déclenchement de la file IA au retour réseau (mobile) - 2026-08-22
+
+Huitième lot mobile de R2. Comble le point "Reste à faire" documenté depuis
+`[0.3.5]` : jusqu'ici `AiQueueProcessor.processPendingOperations` n'était
+appelé que juste après une capture (photo, note vocale) ou manuellement
+depuis `facts_review_screen.dart` - un item resté `pending` faute de réseau
+(avion, zone blanche...) ne repartait donc jamais tout seul au retour en
+ligne, tant que l'utilisateur ne refaisait pas une action explicite.
+
+1. **Nouvelle dépendance `connectivity_plus: ^7.3.1`** (voir commentaire de
+   version dans `pubspec.yaml` - recherche pub.dev, SDK Dart minimum
+   compatible avec la borne déjà fixée par ce projet). Toujours utilisée
+   derrière une interface, jamais directement dans le code applicatif -
+   même principe de frontière que `OcrService`/`AiHttpTransport`.
+2. **`mobile/lib/core/network/connectivity_watcher.dart`** (nouveau) -
+   interface `ConnectivityWatcher` + implémentation réelle
+   `ConnectivityPlusWatcher` au-dessus de
+   `Connectivity().onConnectivityChanged`. Édge-triggered UNIQUEMENT
+   (transition hors-ligne -> en ligne) : ne déclenche jamais rien à la
+   simple connexion initiale au démarrage de l'app, seulement à un retour
+   effectif en ligne après une perte détectée. Limite documentée : une
+   interface réseau active n'est pas la preuve d'un accès Internet réel
+   (`connectivity_plus` ne sonde pas activement) - sans risque, une
+   tentative sur un Wi-Fi sans Internet échoue simplement comme d'habitude
+   (timeout Dio -> item reste `pending`, disjoncteur de retry inchangé).
+3. **`mobile/lib/data/ai_queue_connectivity_listener.dart`** (nouveau) -
+   `AiQueueConnectivityListener`, une seule instance vivant toute la durée
+   de vie de l'app, relance `processPendingOperations` à chaque retour
+   réseau détecté. Découplé volontairement d'`AiQueueProcessor` (dépend
+   d'une simple fonction, pas de la classe complète) pour rester testable
+   sans base Drift/stockage réels. Best-effort explicite (même politique
+   que partout ailleurs dans le pipeline IA) : aucune erreur affichée à
+   l'utilisateur. Logs `[RF][connectivity]` permanents en `kDebugMode`, même
+   convention que `[0.3.14]`.
+4. **Câblage** - `connectivityWatcherProvider`/`aiQueueConnectivityListenerProvider`
+   ajoutés à `lib/core/providers/app_providers.dart` ; `lib/main.dart` :
+   `ReserveFlashApp` devient un `ConsumerWidget`, `ref.watch(aiQueueConnectivityListenerProvider)`
+   dans `build` pour activer l'abonnement une seule fois, tôt, pour toute la
+   durée de vie de l'app (valeur du provider non utilisée - seul l'effet de
+   bord d'activation compte).
+5. **Preuve par test** : `test/data/ai_queue_connectivity_listener_test.dart`
+   (5 tests, `ConnectivityWatcher` fait à la main, aucun plugin réel requis)
+   - un retour réseau déclenche exactement un appel, plusieurs retours
+   déclenchent plusieurs appels, aucun retour ne déclenche jamais rien, un
+   échec de traitement est avalé sans exception non gérée, `dispose()` ferme
+   bien le `ConnectivityWatcher` sous-jacent.
+6. **Robustesse** - `ConnectivityPlusWatcher` attache un `onError` explicite
+   à l'abonnement au plugin natif (best-effort, même politique que le reste
+   du pipeline IA) : si le canal de plateforme n'est pas disponible
+   (plateforme non supportée, ou `flutter test` hors intégration - AUCUN
+   canal réel dans ce contexte), cette fonctionnalité optionnelle se
+   dégrade silencieusement plutôt que de faire planter l'app. `test/widget_test.dart`
+   (le seul test qui construit `ReserveFlashApp` en entier, donc le seul
+   qui active `AiQueueConnectivityListener`) est mis à jour en conséquence :
+   `connectivityWatcherProvider` y est explicitement remplacé par un faux
+   `ConnectivityWatcher` qui n'émet jamais rien - même principe d'isolation
+   des plugins tiers que `OcrService`/`AiHttpTransport` ailleurs dans ce
+   projet, plutôt que de dépendre du comportement (non garanti) d'un plugin
+   réel dans un test qui n'est pas un test d'intégration.
+
+Non couvert par ce lot (limitation connue, honnête) : aucun test terrain
+réel de ce déclenchement (nécessiterait de couper/rétablir le réseau de
+l'émulateur pendant qu'un item reste `pending`) - reste à faire au prochain
+test terrain, avec les logs `[RF][connectivity]` filtrés comme d'habitude.
+
 ## [0.3.16] - R2 - extractFromPhoto validé en conditions réelles avec un résultat correctement rempli - 2026-08-22
 
 Retest terrain après le correctif `[0.3.15]`, logs `[RF]` filtrés

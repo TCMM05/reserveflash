@@ -105,12 +105,14 @@ ou un vrai bon de livraison papier) plutôt que manuscrit.
 Convention adoptée après plusieurs allers-retours de debug terrain (2026-08,
 voir CHANGELOG) : chaque point de mise en file IA best-effort
 (`document_capture_screen.dart`, `issue_type_screen.dart`,
-`evidence_capture_screen.dart`, `voice_description_screen.dart`) et l'OCR
-lui-même (`lib/data/local/ocr_service.dart`) émettent un `debugPrint`
-préfixé `[RF][<nom_opération>]` à chaque branche de décision (annulé/mis en
-file/résultat/exception). Toujours actifs en mode debug, coût nul en
-release (`kDebugMode`, éliminé par tree-shaking - jamais dans un APK de
-production).
+`evidence_capture_screen.dart`, `voice_description_screen.dart`), l'OCR
+lui-même (`lib/data/local/ocr_service.dart`) et le déclenchement au retour
+réseau (`lib/data/ai_queue_connectivity_listener.dart`, `[0.3.17]`)
+émettent un `debugPrint` préfixé `[RF][<nom_opération>]` (`extractFromDocument`/
+`extractFromPhoto`/`OCR`/`connectivity`) à chaque branche de décision
+(annulé/mis en file/résultat/exception). Toujours actifs en mode debug,
+coût nul en release (`kDebugMode`, éliminé par tree-shaking - jamais dans un
+APK de production).
 
 Ces chemins sont volontairement SILENCIEUX pour l'utilisateur (politique
 "jamais d'erreur affichée pour une étape optionnelle") - sans ces logs, un

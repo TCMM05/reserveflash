@@ -234,6 +234,20 @@ corrigée.
     dossier - jamais de texte factice. "Modifier les faits"/"Continuer"
     inchangés (retour à l'écran précédent / vers `final_document_screen.dart`,
     toujours un stub, hors périmètre - voir demande corrective R1).
+  - Déclenchement automatique de la file au retour réseau (`[0.3.17]`) -
+    `mobile/lib/core/network/connectivity_watcher.dart` (interface
+    `ConnectivityWatcher` + implémentation `ConnectivityPlusWatcher`,
+    nouvelle dépendance `connectivity_plus`) et
+    `mobile/lib/data/ai_queue_connectivity_listener.dart`
+    (`AiQueueConnectivityListener`, une seule instance pour toute la durée
+    de vie de l'app, voir câblage `lib/main.dart`/`app_providers.dart`) :
+    `AiQueueProcessor.processPendingOperations` est désormais relancé
+    automatiquement à chaque transition hors-ligne -> en ligne détectée, en
+    plus des déclenchements existants (juste après une capture, ou
+    manuellement depuis `facts_review_screen.dart`). Preuve par test :
+    `test/data/ai_queue_connectivity_listener_test.dart` (5 tests, watcher
+    fait à la main). Pas de test terrain de ce chemin à ce stade (voir
+    "Reste à faire").
 - **Limites documentées de ce câblage (V1, pas des bugs)** :
   - TOUS les champs V1 prioritaires doivent être résolus pour valider une
     anomalie - pas de distinction "champ critique pour CE type d'anomalie"
@@ -254,10 +268,9 @@ corrigée.
     de `ReserveScreen` en l'atteignant directement, sans navigation - même
     limite déjà documentée pour l'audio dans `evidence_viewer_test.dart`.
 - **Reste à faire** :
-  - Déclenchement de la file au retour réseau (listener de connectivité) -
-    à ce stade, `AiQueueProcessor.processPendingOperations` n'est appelé
-    que juste après une capture ou manuellement depuis `facts_review_screen.dart`,
-    jamais automatiquement sur un simple retour en ligne.
+  - Test terrain réel du déclenchement au retour réseau (`[0.3.17]`, câblé
+    ce lot mais jamais exercé sur un vrai appareil/émulateur - nécessite de
+    couper/rétablir le réseau pendant qu'un item reste `pending`).
   - `document_metadata_screen.dart` (S07, métadonnées BL - voir décision 4
     ci-dessus).
   - `final_document_screen.dart` (S13, photo du document complété) - reste
@@ -456,8 +469,10 @@ Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 
 ## Prochaines étapes
 
-1. Mobile : déclenchement de la file au retour réseau +
-   `document_metadata_screen.dart` (S07). Écran de revue réel et bascule
+1. Mobile : `document_metadata_screen.dart` (S07) reste à faire. Déclenchement
+   de la file au retour réseau : FAIT (`[0.3.17]`, voir "Avancement réel"
+   ci-dessus) mais PAS encore testé en conditions réelles - reste ce test
+   terrain. Écran de revue réel et bascule
    manuelle/UNKNOWN sur disjoncteur de retry : FAIT (`[0.3.6]`, voir section
    "Avancement réel" ci-dessus). OCR (ML Kit) sur le BL : FAIT et **validé en
    conditions réelles avec un résultat correctement rempli** (`[0.3.9]` à

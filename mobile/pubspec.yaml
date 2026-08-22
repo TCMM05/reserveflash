@@ -137,6 +137,20 @@ dependencies:
   # jointes locales (voir docs/adr/0002-local-first-pivot.md).
   archive: ^3.6.1
 
+  # R2 (point "déclenchement de la file au retour réseau", voir
+  # docs/GATE_R2_STATUS.md) - détecte la transition hors-ligne -> en ligne
+  # pour relancer automatiquement AiQueueProcessor.processPendingOperations
+  # (lib/data/ai_queue_connectivity_listener.dart), sans action explicite de
+  # l'utilisateur. Version choisie après recherche (pub.dev/packages/
+  # connectivity_plus, 2026-08) : ^7.3.1 est la dernière publiée au moment
+  # de ce lot, SDK Dart minimum ">=3.3.0 <4.0.0" - compatible avec la borne
+  # déjà fixée par ce projet (">=3.4.0 <4.0.0", voir `environment` ci-dessus).
+  # Toujours utilisé derrière l'interface `ConnectivityWatcher`
+  # (lib/core/network/connectivity_watcher.dart), jamais directement dans le
+  # code applicatif - même principe de frontière que `OcrService`/
+  # `AiHttpTransport`.
+  connectivity_plus: ^7.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

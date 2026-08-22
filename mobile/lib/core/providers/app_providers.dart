@@ -9,6 +9,7 @@
 /// directement (section 5.1 - "pas de logique métier dans les widgets").
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 // R1 (bug decouvert par execution reelle - `flutter analyze`/`flutter test`) :
@@ -26,6 +27,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../data/ai_queue_connectivity_listener.dart';
 import '../../data/ai_queue_processor.dart';
 import '../../data/local/app_database.dart';
 import '../../data/local/evidence_storage.dart';
@@ -41,6 +43,7 @@ import '../../domain/entities/issue.dart' as domain;
 import '../../domain/entities/reserve_text.dart' as domain;
 import '../../domain/repositories/incident_repository.dart';
 import '../config/backend_config.dart';
+import '../network/connectivity_watcher.dart';
 
 /// Ouvre la base Drift/SQLite réelle de l'app (points 1/2 - "source de
 /// vérité locale") : fichier persistant dans l'espace privé de l'app
@@ -127,6 +130,34 @@ final Provider<AiQueueProcessor> aiQueueProcessorProvider =
     evidenceStorage: ref.watch(evidenceStorageServiceProvider),
     ocrService: ref.watch(ocrServiceProvider),
   );
+});
+
+/// R2 (point "déclenchement de la file au retour réseau", voir
+/// `lib/core/network/connectivity_watcher.dart`) - une seule instance pour
+/// toute la durée de vie de l'app, fermée proprement à la destruction du
+/// `ProviderScope` racine (hot-restart, tests).
+final Provider<ConnectivityWatcher> connectivityWatcherProvider =
+    Provider<ConnectivityWatcher>((ref) {
+  final ConnectivityPlusWatcher watcher = ConnectivityPlusWatcher();
+  ref.onDispose(() => unawaited(watcher.dispose()));
+  return watcher;
+});
+
+/// R2 - s'abonne à [connectivityWatcherProvider] pour relancer
+/// automatiquement `AiQueueProcessor.processPendingOperations` au retour
+/// réseau (voir `lib/data/ai_queue_connectivity_listener.dart`). Ce
+/// provider doit être "activé" une seule fois, tôt, pour toute la durée de
+/// vie de l'app - voir `ReserveFlashApp` (`lib/main.dart`), qui le
+/// `ref.watch` sans utiliser sa valeur (le seul but est de déclencher sa
+/// construction, donc l'abonnement à la connectivité).
+final Provider<AiQueueConnectivityListener> aiQueueConnectivityListenerProvider =
+    Provider<AiQueueConnectivityListener>((ref) {
+  final AiQueueConnectivityListener listener = AiQueueConnectivityListener(
+    connectivityWatcher: ref.watch(connectivityWatcherProvider),
+    processPendingOperations: () => ref.read(aiQueueProcessorProvider).processPendingOperations(),
+  );
+  ref.onDispose(() => unawaited(listener.dispose()));
+  return listener;
 });
 
 /// Compteur incrémenté après toute mutation locale (création/suppression
