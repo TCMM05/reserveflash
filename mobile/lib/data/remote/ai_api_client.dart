@@ -29,6 +29,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 
 import '../../domain/errors/domain_errors.dart';
 import '../../domain/fact_set/candidate_fact_data.dart';
@@ -149,6 +150,26 @@ final class DioAiHttpTransport implements AiHttpTransport {
       // Ici, uniquement les échecs de TRANSPORT (validateStatus ci-dessus
       // empêche dio de lever pour un simple code HTTP d'erreur) : timeout,
       // hôte injoignable, certificat invalide, requête annulée.
+      //
+      // DIAGNOSTIC (voir consigne "toujours logger les branches
+      // silencieuses/best-effort") : `AiTransportException.message` (voir
+      // usage ci-dessous) n'expose que `e.message` (le texte générique de
+      // dio pour le type d'erreur, ex: "The connection errored: Connection
+      // refused...") - jamais l'URI COMPLÈTE réellement visée
+      // (`e.requestOptions.uri` : utile pour écarter une éventuelle
+      // divergence entre `dioProvider.baseUrl` et la requête réellement
+      // envoyée), ni l'exception d'origine brute (`e.error`, ex: le
+      // `SocketException`/`OSError` sous-jacent avec son `errno` exact -
+      // `e.message` peut être un texte reformulé par dio qui masque ce
+      // détail). Ce log imprime les deux avant que l'exception ne soit
+      // ré-enveloppée et que cette information ne soit plus accessible.
+      if (kDebugMode) {
+        debugPrint(
+          '[RF][dio] DioException sur ${e.requestOptions.uri} '
+          '(type=${e.type.name}) : e.error=${e.error} '
+          '(${e.error.runtimeType}) - e.message=${e.message}',
+        );
+      }
       throw AiTransportException('${e.type.name}: ${e.message ?? e.error ?? 'erreur inconnue'}');
     }
   }

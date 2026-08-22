@@ -2,6 +2,32 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.26] - R2 - log diagnostic sur l'exception dio brute (test terrain en cours) - 2026-08-22
+
+Suite à `[0.3.25]` : `backendBaseUrl` confirmé correct
+(`http://192.168.1.42:8000`), mais l'échec `Connection refused` persiste
+côté appli. Test de dissociation décisif effectué via Swagger
+(`http://192.168.1.42:8000/docs`, `POST /v1/ai/extract`, "Try it out" ->
+"Execute" depuis le NAVIGATEUR du téléphone) : la requête POST aboutit
+réellement (**code 500** renvoyé par le backend - une vraie réponse HTTP,
+pas une erreur de connexion) au même instant où l'appli continue de
+recevoir `Connection refused` sur cette même route. Ceci prouve que ce
+n'est PAS un problème réseau (POST en clair fonctionne bel et bien depuis
+ce téléphone, sur ce réseau, vers cette route) - le problème est propre au
+client Dio de l'appli elle-même, cause encore inconnue.
+
+**Correctif (diagnostic uniquement)** : `DioAiHttpTransport.postJson`
+(`mobile/lib/data/remote/ai_api_client.dart`) ne loggait jusqu'ici que
+`e.message` (texte déjà reformulé par dio) - jamais l'URI complète
+réellement visée par la requête (`e.requestOptions.uri`, pour écarter une
+éventuelle divergence avec `dioProvider.baseUrl`) ni l'exception d'origine
+brute (`e.error`, ex: le `SocketException`/`OSError` avec son `errno`
+exact, potentiellement plus précis que le texte reformulé de dio). Nouveau
+log `[RF][dio]` juste avant le ré-enveloppement en `AiTransportException`,
+qui imprime les deux. Non testé/compilé dans ce bac à sable (pas de SDK
+Flutter ici) - à valider par l'utilisateur avec `flutter run` + `flutter
+logs`.
+
 ## [0.3.25] - R2 - log diagnostic sur l'URL backend réellement utilisée par le build (test terrain en cours) - 2026-08-22
 
 Suite au log `[RF][ai-queue]` ajouté en `[0.3.24]` : la cause exacte
