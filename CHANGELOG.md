@@ -2,6 +2,30 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.19] - R2 - S07 validé en conditions réelles (mobile) - 2026-08-22
+
+Retest terrain après `[0.3.18]`. Point de build à noter (pas un bug de
+livraison) : l'ajout de `LocalIncidents.deliveryDate` nécessitait de
+régénérer le code Drift avant tout `flutter analyze`/`flutter test` -
+`dart run build_runner build --delete-conflicting-outputs`, oublié dans les
+instructions initiales de ce lot. Une fois régénéré : `flutter analyze`
+propre, **119/119 tests passés** (112 avant `[0.3.17]`/`[0.3.18]`, +5 pour
+`ai_queue_connectivity_listener_test.dart`, +2 pour le nouveau test
+`updateIncidentMetadata` - compte exact).
+
+Test terrain confirmé : l'écran "Vérifier les informations" (S07) apparaît
+bien juste après la photo du bon de livraison, avant l'écran du type de
+problème - le parcours ne saute plus directement de S06 à S08. Les 4
+champs (fournisseur, transporteur, référence BL, et `deliveryDate`
+nouvellement ajouté) persistent correctement et restent visibles/
+corrigeables depuis le détail du dossier (S17), confirmé par capture
+d'écran de la fenêtre "Corriger les informations" avec les 4 champs
+pré-remplis.
+
+Non couvert par ce test (limitation connue) : déclenchement de la file IA
+au retour réseau (`[0.3.17]`) - câblé mais toujours pas testé en conditions
+réelles, reste à faire.
+
 ## [0.3.18] - R2 - câblage S07 "Vérifier les informations" (mobile) - 2026-08-22
 
 Neuvième lot mobile de R2. `document_metadata_screen.dart` (S07) était un

@@ -282,14 +282,15 @@ corrigée.
     (persistance de `deliveryDate`, et nouveau test dédié pour
     `updateIncidentMetadata` - jusqu'ici sans aucune couverture malgré 3
     écrans appelants). Pas de widget test dédié pour cet écran (même
-    précédent que `create_incident_screen.dart`/`incident_detail_screen.dart`)
-    ni de test terrain réel à ce stade.
+    précédent que `create_incident_screen.dart`/`incident_detail_screen.dart`).
+    **Validé en conditions réelles** (2026-08-22, voir "Recette terrain"
+    ci-dessous) : l'écran apparaît bien juste après la photo du BL, avant le
+    type de problème, et les 4 champs (dont `deliveryDate`, nouveau)
+    persistent correctement et restent corrigeables depuis S17.
 - **Reste à faire** :
   - Test terrain réel du déclenchement au retour réseau (`[0.3.17]`, câblé
     ce lot mais jamais exercé sur un vrai appareil/émulateur - nécessite de
     couper/rétablir le réseau pendant qu'un item reste `pending`).
-  - Test terrain réel de S07 (`[0.3.18]`, câblé ce lot mais jamais exercé
-    sur un vrai appareil/émulateur).
   - `final_document_screen.dart` (S13, photo du document complété) - reste
     un `RfScreenStub`, explicitement hors périmètre R1 (F13/F14).
 
@@ -471,14 +472,28 @@ correct (Produit = perceuse, Référence = PRC 450, Quantité attendue = 10).
 résultat correctement rempli**, au même niveau que le BL et la note vocale.
 Voir `CHANGELOG.md [0.3.15]`/`[0.3.16]`.
 
+**Mise à jour 2026-08-22 (suite) - S07 "Vérifier les informations" validé
+en conditions réelles** : après régénération du code Drift
+(`dart run build_runner build --delete-conflicting-outputs`, nécessaire
+suite à l'ajout de `deliveryDate` à `LocalIncidents` - `flutter analyze`
+propre, 119/119 tests passés), test terrain confirmé : l'écran S07
+apparaît bien juste après la photo du bon de livraison, avant l'écran du
+type de problème (le parcours ne saute plus directement de S06 à S08).
+Fournisseur/transporteur/référence BL/date du BL saisis à S07 persistent
+correctement et restent visibles/corrigeables depuis le détail du dossier
+(S17, capture d'écran de la fenêtre "Corriger les informations" avec les 4
+champs pré-remplis, dont "Date du BL : 11/09/2023"). Voir
+`CHANGELOG.md [0.3.18]`.
+
 Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 - Test sur un **appareil Android physique réel** (celui-ci était un
   émulateur) - networking/latence/micro/caméra réels peuvent différer.
 - Test avec un **vrai bon de livraison papier réel** (celui-ci était un
   texte imprimé affiché sur un écran, pas du papier photographié) - à faire
   idéalement avant appareil physique. Déclenchement automatique de la file
-  au retour réseau, exigences coût/tokens IA (points 9/10/12) : toujours pas
-  commencés (voir section "Avancement réel" ci-dessus).
+  au retour réseau (câblé, `[0.3.17]`, PAS encore testé en conditions
+  réelles - reste à faire), exigences coût/tokens IA (points 9/10/12) :
+  toujours pas commencées (voir section "Avancement réel" ci-dessus).
 - **La recette indépendante elle-même** : cette session de test a été menée
   par l'utilisateur avec l'assistant en accompagnement, ce n'est PAS la
   recette indépendante prévue par le processus GATE. Aucun verdict "GATE R2
@@ -486,11 +501,11 @@ Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 
 ## Prochaines étapes
 
-1. Mobile : `document_metadata_screen.dart` (S07) : FAIT (`[0.3.18]`, voir
+1. Mobile : `document_metadata_screen.dart` (S07) : FAIT et **validé en
+   conditions réelles** (`[0.3.18]`, voir "Recette terrain" ci-dessus).
+   Déclenchement de la file au retour réseau : FAIT (`[0.3.17]`, voir
    "Avancement réel" ci-dessus) mais PAS encore testé en conditions
-   réelles. Déclenchement de la file au retour réseau : FAIT (`[0.3.17]`,
-   voir "Avancement réel" ci-dessus) mais PAS encore testé en conditions
-   réelles non plus - reste ces deux tests terrain. Écran de revue réel et bascule
+   réelles - reste ce test terrain. Écran de revue réel et bascule
    manuelle/UNKNOWN sur disjoncteur de retry : FAIT (`[0.3.6]`, voir section
    "Avancement réel" ci-dessus). OCR (ML Kit) sur le BL : FAIT et **validé en
    conditions réelles avec un résultat correctement rempli** (`[0.3.9]` à
