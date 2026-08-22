@@ -155,6 +155,12 @@ final Provider<AiQueueConnectivityListener> aiQueueConnectivityListenerProvider 
   final AiQueueConnectivityListener listener = AiQueueConnectivityListener(
     connectivityWatcher: ref.watch(connectivityWatcherProvider),
     processPendingOperations: () => ref.read(aiQueueProcessorProvider).processPendingOperations(),
+    // Voir docstring de `ai_queue_connectivity_listener.dart` (bug trouvé
+    // après [0.3.17]/[0.3.18] - traitement effectué SANS que l'UI ne soit
+    // jamais notifiée) : même compteur que `notifyDataChanged(WidgetRef)`
+    // ci-dessous, ce fichier n'ayant accès qu'à un `Ref` de provider, pas
+    // un `WidgetRef`.
+    notifyDataChanged: () => ref.read(dataRefreshTickProvider.notifier).state++,
   );
   ref.onDispose(() => unawaited(listener.dispose()));
   return listener;

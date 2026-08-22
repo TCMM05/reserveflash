@@ -40,6 +40,12 @@ class _FakeConnectivityWatcher implements ConnectivityWatcher {
 
 const AiQueueProcessingSummary _emptySummary =
     AiQueueProcessingSummary(succeeded: 0, failed: 0, skipped: 0);
+const AiQueueProcessingSummary _skippedOnlySummary =
+    AiQueueProcessingSummary(succeeded: 0, failed: 0, skipped: 1);
+const AiQueueProcessingSummary _succeededSummary =
+    AiQueueProcessingSummary(succeeded: 1, failed: 0, skipped: 0);
+const AiQueueProcessingSummary _failedSummary =
+    AiQueueProcessingSummary(succeeded: 0, failed: 1, skipped: 0);
 
 void main() {
   group('AiQueueConnectivityListener', () {
@@ -52,6 +58,7 @@ void main() {
           callCount++;
           return _emptySummary;
         },
+        notifyDataChanged: () {},
       );
 
       watcher.emitBecameOnline();
@@ -70,6 +77,7 @@ void main() {
           callCount++;
           return _emptySummary;
         },
+        notifyDataChanged: () {},
       );
 
       watcher.emitBecameOnline();
@@ -90,6 +98,7 @@ void main() {
           callCount++;
           return _emptySummary;
         },
+        notifyDataChanged: () {},
       );
 
       await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -107,6 +116,7 @@ void main() {
           processPendingOperations: () async {
             throw StateError('panne réseau simulée');
           },
+          notifyDataChanged: () {},
         );
 
         watcher.emitBecameOnline();
@@ -124,11 +134,104 @@ void main() {
       final AiQueueConnectivityListener listener = AiQueueConnectivityListener(
         connectivityWatcher: watcher,
         processPendingOperations: () async => _emptySummary,
+        notifyDataChanged: () {},
       );
 
       await listener.dispose();
 
       expect(watcher.disposeCalled, isTrue);
+    });
+
+    // Bug trouvé en repréparant le test terrain de ce lot (voir docstring
+    // de `ai_queue_connectivity_listener.dart` et CHANGELOG) : le fichier
+    // ne prévenait initialement JAMAIS l'UI après un traitement réussi -
+    // les 4 tests suivants couvrent précisément ce correctif.
+    group('notifyDataChanged (correctif - rafraîchissement UI)', () {
+      test('traitement avec un succès -> notifyDataChanged appelé', () async {
+        final _FakeConnectivityWatcher watcher = _FakeConnectivityWatcher();
+        int notifyCount = 0;
+        final AiQueueConnectivityListener listener = AiQueueConnectivityListener(
+          connectivityWatcher: watcher,
+          processPendingOperations: () async => _succeededSummary,
+          notifyDataChanged: () => notifyCount++,
+        );
+
+        watcher.emitBecameOnline();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+
+        expect(notifyCount, 1);
+        await listener.dispose();
+      });
+
+      test('traitement avec un échec (mais pas d\'exception) -> notifyDataChanged appelé', () async {
+        final _FakeConnectivityWatcher watcher = _FakeConnectivityWatcher();
+        int notifyCount = 0;
+        final AiQueueConnectivityListener listener = AiQueueConnectivityListener(
+          connectivityWatcher: watcher,
+          processPendingOperations: () async => _failedSummary,
+          notifyDataChanged: () => notifyCount++,
+        );
+
+        watcher.emitBecameOnline();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+
+        // Un échec mute quand même l'item (retryCount, lastError) - la
+        // bannière `pendingAiOperationsProvider` doit pouvoir le refléter.
+        expect(notifyCount, 1);
+        await listener.dispose();
+      });
+
+      test('résumé entièrement vide -> notifyDataChanged PAS appelé', () async {
+        final _FakeConnectivityWatcher watcher = _FakeConnectivityWatcher();
+        int notifyCount = 0;
+        final AiQueueConnectivityListener listener = AiQueueConnectivityListener(
+          connectivityWatcher: watcher,
+          processPendingOperations: () async => _emptySummary,
+          notifyDataChanged: () => notifyCount++,
+        );
+
+        watcher.emitBecameOnline();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+
+        expect(notifyCount, 0);
+        await listener.dispose();
+      });
+
+      test('résumé "skipped" uniquement -> notifyDataChanged PAS appelé', () async {
+        final _FakeConnectivityWatcher watcher = _FakeConnectivityWatcher();
+        int notifyCount = 0;
+        final AiQueueConnectivityListener listener = AiQueueConnectivityListener(
+          connectivityWatcher: watcher,
+          processPendingOperations: () async => _skippedOnlySummary,
+          notifyDataChanged: () => notifyCount++,
+        );
+
+        watcher.emitBecameOnline();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+
+        // "skipped" = items déjà épuisés par le disjoncteur, laissés tels
+        // quels (voir ai_queue_processor.dart) - rien n'a été muté.
+        expect(notifyCount, 0);
+        await listener.dispose();
+      });
+
+      test('exception de processPendingOperations -> notifyDataChanged PAS appelé', () async {
+        final _FakeConnectivityWatcher watcher = _FakeConnectivityWatcher();
+        int notifyCount = 0;
+        final AiQueueConnectivityListener listener = AiQueueConnectivityListener(
+          connectivityWatcher: watcher,
+          processPendingOperations: () async {
+            throw StateError('panne réseau simulée');
+          },
+          notifyDataChanged: () => notifyCount++,
+        );
+
+        watcher.emitBecameOnline();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+
+        expect(notifyCount, 0);
+        await listener.dispose();
+      });
     });
   });
 }

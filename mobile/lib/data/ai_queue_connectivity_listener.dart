@@ -26,6 +26,25 @@
 /// même convention que le reste du pipeline IA (voir CHANGELOG `[0.3.14]`,
 /// consigne permanente du projet : toujours insérer des logs de diagnostic
 /// sur un chemin silencieux par conception).
+///
+/// Bug trouvé en repréparant le test terrain de ce lot (avant tout retest
+/// utilisateur - voir CHANGELOG) : ce fichier ne rafraîchissait RIEN côté
+/// UI après un traitement automatique réussi. Tous les autres écrans qui
+/// mutent des données locales appellent `notifyDataChanged` (`WidgetRef`,
+/// `app_providers.dart`) - un simple compteur (`dataRefreshTickProvider`)
+/// dont dépendent les `FutureProvider` de lecture (`latestCandidateFactSetProvider`,
+/// `pendingAiOperationsProvider`, ...) pour se re-déclencher (pas de "watch"
+/// live multi-écran sur Drift, limitation connue depuis R1). Ce fichier
+/// n'a PAS accès à un `WidgetRef` (construit dans un `Provider`, pas un
+/// widget) - [notifyDataChanged] ci-dessous est donc une simple fonction
+/// injectée (même principe que [processPendingOperations]), câblée en
+/// pratique sur le même compteur (voir `aiQueueConnectivityListenerProvider`).
+/// Sans cet appel, le retour réseau automatique aurait bien fonctionné
+/// CÔTÉ DONNÉES (la base contient le bon résultat), mais un écran déjà
+/// ouvert au moment du retour réseau (ex: "Vérifier les faits") ne
+/// l'aurait affiché qu'après une action explicite de l'utilisateur
+/// (bouton de rafraîchissement manuel, ou sortie/re-entrée de l'écran) -
+/// à l'opposé du but même de ce lot ("sans action utilisateur").
 library;
 
 import 'dart:async';
@@ -39,13 +58,16 @@ class AiQueueConnectivityListener {
   AiQueueConnectivityListener({
     required ConnectivityWatcher connectivityWatcher,
     required Future<AiQueueProcessingSummary> Function() processPendingOperations,
+    required void Function() notifyDataChanged,
   })  : _connectivityWatcher = connectivityWatcher,
-        _processPendingOperations = processPendingOperations {
+        _processPendingOperations = processPendingOperations,
+        _notifyDataChanged = notifyDataChanged {
     _subscription = _connectivityWatcher.onBecameOnline.listen((_) => _onBecameOnline());
   }
 
   final ConnectivityWatcher _connectivityWatcher;
   final Future<AiQueueProcessingSummary> Function() _processPendingOperations;
+  final void Function() _notifyDataChanged;
   StreamSubscription<void>? _subscription;
 
   void _onBecameOnline() {
@@ -62,6 +84,14 @@ class AiQueueConnectivityListener {
             'succeeded=${summary.succeeded} failed=${summary.failed} '
             'skipped=${summary.skipped}.',
           );
+        }
+        // Voir docstring de fichier : sans ceci, un écran déjà ouvert (ex:
+        // "Vérifier les faits") n'afficherait le résultat qu'après une
+        // action explicite de l'utilisateur. `skipped` seul (items déjà
+        // épuisés par le disjoncteur de retry, laissés tels quels) n'a
+        // rien muté - inutile de rafraîchir dans ce cas précis.
+        if (summary.succeeded + summary.failed > 0) {
+          _notifyDataChanged();
         }
       }).catchError((Object e) {
         if (kDebugMode) {

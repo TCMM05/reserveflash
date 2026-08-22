@@ -2,6 +2,42 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.20] - R2 - correctif : retour réseau n'avertissait jamais l'UI - 2026-08-22
+
+Trouvé en préparant le test terrain du retour réseau (`[0.3.17]`), AVANT
+tout retest utilisateur - même discipline que le bug `extractFromPhoto`
+(`[0.3.15]`) : relire le code une fois de plus avant de faire retester,
+plutôt que de laisser l'utilisateur découvrir un problème.
+
+`AiQueueConnectivityListener` (`lib/data/ai_queue_connectivity_listener.dart`)
+appelait bien `AiQueueProcessor.processPendingOperations` au retour réseau,
+mais ne prévenait JAMAIS l'UI du résultat. Tous les autres points d'écriture
+du projet appellent `notifyDataChanged` (`WidgetRef`, `app_providers.dart`)
+après une mutation - un compteur (`dataRefreshTickProvider`) dont dépendent
+les `FutureProvider` de lecture pour se re-déclencher (pas de "watch" live
+multi-écran sur Drift, limitation connue depuis R1). Ce fichier n'a accès
+qu'à un `Ref` de provider (construit dans `aiQueueConnectivityListenerProvider`),
+jamais à un `WidgetRef` : sans correctif, un écran déjà ouvert au moment du
+retour réseau (typiquement "Vérifier les faits") n'aurait affiché le
+résultat qu'après une action explicite de l'utilisateur (rafraîchissement
+manuel, ou sortie/re-entrée de l'écran) - à l'opposé du but même de
+`[0.3.17]` ("sans action utilisateur").
+
+**Correctif** : nouveau paramètre `notifyDataChanged` (simple fonction,
+même principe que `processPendingOperations` - découplage volontaire d'un
+`WidgetRef`), appelé après un traitement qui a réellement muté quelque
+chose (`succeeded + failed > 0`) - PAS appelé si le résumé est vide ou ne
+contient que des `skipped` (items déjà épuisés par le disjoncteur de
+retry, laissés tels quels, rien à rafraîchir). Câblé dans
+`aiQueueConnectivityListenerProvider` (`app_providers.dart`) sur le même
+`dataRefreshTickProvider` que `notifyDataChanged(WidgetRef)`.
+
+Preuve par test : `test/data/ai_queue_connectivity_listener_test.dart`,
+nouveau groupe dédié (5 tests : succès -> appelé, échec sans exception ->
+appelé, résumé vide -> pas appelé, résumé "skipped" uniquement -> pas
+appelé, exception -> pas appelé). Total du fichier : 10 tests (5
+précédents + 5 nouveaux).
+
 ## [0.3.19] - R2 - S07 validé en conditions réelles (mobile) - 2026-08-22
 
 Retest terrain après `[0.3.18]`. Point de build à noter (pas un bug de

@@ -249,8 +249,13 @@ corrigée.
     `AiQueueProcessor.processPendingOperations` est désormais relancé
     automatiquement à chaque transition hors-ligne -> en ligne détectée, en
     plus des déclenchements existants (juste après une capture, ou
-    manuellement depuis `facts_review_screen.dart`). Preuve par test :
-    `test/data/ai_queue_connectivity_listener_test.dart` (5 tests, watcher
+    manuellement depuis `facts_review_screen.dart`). Correctif `[0.3.20]`
+    trouvé en préparant le test terrain (avant tout retest utilisateur) :
+    le traitement automatique ne prévenait jamais l'UI de son résultat
+    (`notifyDataChanged` manquant) - un écran déjà ouvert au moment du
+    retour réseau n'aurait affiché le résultat qu'après une action
+    explicite. Preuve par test :
+    `test/data/ai_queue_connectivity_listener_test.dart` (10 tests, watcher
     fait à la main). Pas de test terrain de ce chemin à ce stade (voir
     "Reste à faire").
 - **Limites documentées de ce câblage (V1, pas des bugs)** :
