@@ -256,8 +256,8 @@ corrigée.
     retour réseau n'aurait affiché le résultat qu'après une action
     explicite. Preuve par test :
     `test/data/ai_queue_connectivity_listener_test.dart` (10 tests, watcher
-    fait à la main). Pas de test terrain de ce chemin à ce stade (voir
-    "Reste à faire").
+    fait à la main). **Validé en conditions réelles** (2026-08-22, voir
+    "Recette terrain" ci-dessous).
 - **Limites documentées de ce câblage (V1, pas des bugs)** :
   - TOUS les champs V1 prioritaires doivent être résolus pour valider une
     anomalie - pas de distinction "champ critique pour CE type d'anomalie"
@@ -293,9 +293,6 @@ corrigée.
     type de problème, et les 4 champs (dont `deliveryDate`, nouveau)
     persistent correctement et restent corrigeables depuis S17.
 - **Reste à faire** :
-  - Test terrain réel du déclenchement au retour réseau (`[0.3.17]`, câblé
-    ce lot mais jamais exercé sur un vrai appareil/émulateur - nécessite de
-    couper/rétablir le réseau pendant qu'un item reste `pending`).
   - `final_document_screen.dart` (S13, photo du document complété) - reste
     un `RfScreenStub`, explicitement hors périmètre R1 (F13/F14).
 
@@ -490,15 +487,28 @@ correctement et restent visibles/corrigeables depuis le détail du dossier
 champs pré-remplis, dont "Date du BL : 11/09/2023"). Voir
 `CHANGELOG.md [0.3.18]`.
 
+**Mise à jour 2026-08-22 (suite) - déclenchement au retour réseau validé
+en conditions réelles** : un bug (`notifyDataChanged` manquant, voir
+`CHANGELOG.md [0.3.20]`) a été trouvé et corrigé en préparant ce test,
+AVANT que l'utilisateur ne le tente - sans ce correctif, le test aurait
+semblé échoué (donnée bien enregistrée en base mais jamais montrée à
+l'écran sans action manuelle). Une fois corrigé : réseau coupé avant la
+capture de la photo "Étiquette / référence" (item resté `pending`), photo
+prise, réseau rétabli SANS fermer l'app entre-temps (condition nécessaire
+au déclenchement - voir docstring `ConnectivityPlusWatcher`), résultat
+confirmé : le champ se remplit automatiquement, sans aucune action
+utilisateur après la reconnexion. **Déclenchement automatique au retour
+réseau validé en conditions réelles.** Voir `CHANGELOG.md [0.3.17]`/
+`[0.3.20]`.
+
 Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 - Test sur un **appareil Android physique réel** (celui-ci était un
   émulateur) - networking/latence/micro/caméra réels peuvent différer.
 - Test avec un **vrai bon de livraison papier réel** (celui-ci était un
   texte imprimé affiché sur un écran, pas du papier photographié) - à faire
-  idéalement avant appareil physique. Déclenchement automatique de la file
-  au retour réseau (câblé, `[0.3.17]`, PAS encore testé en conditions
-  réelles - reste à faire), exigences coût/tokens IA (points 9/10/12) :
-  toujours pas commencées (voir section "Avancement réel" ci-dessus).
+  idéalement avant appareil physique. Exigences coût/tokens IA (points
+  9/10/12) : toujours pas commencées (voir section "Avancement réel"
+  ci-dessus).
 - **La recette indépendante elle-même** : cette session de test a été menée
   par l'utilisateur avec l'assistant en accompagnement, ce n'est PAS la
   recette indépendante prévue par le processus GATE. Aucun verdict "GATE R2
@@ -508,9 +518,11 @@ Ce qui N'EST PAS encore fait, à ne pas confondre avec ce qui précède :
 
 1. Mobile : `document_metadata_screen.dart` (S07) : FAIT et **validé en
    conditions réelles** (`[0.3.18]`, voir "Recette terrain" ci-dessus).
-   Déclenchement de la file au retour réseau : FAIT (`[0.3.17]`, voir
-   "Avancement réel" ci-dessus) mais PAS encore testé en conditions
-   réelles - reste ce test terrain. Écran de revue réel et bascule
+   Déclenchement de la file au retour réseau : FAIT et **validé en
+   conditions réelles** (`[0.3.17]`/`[0.3.20]`, voir "Recette terrain"
+   ci-dessus - un bug d'UI trouvé et corrigé au passage, `[0.3.20]`). Ces
+   deux points de "câblage mobile manquant" (voir échange précédent) sont
+   désormais entièrement traités. Écran de revue réel et bascule
    manuelle/UNKNOWN sur disjoncteur de retry : FAIT (`[0.3.6]`, voir section
    "Avancement réel" ci-dessus). OCR (ML Kit) sur le BL : FAIT et **validé en
    conditions réelles avec un résultat correctement rempli** (`[0.3.9]` à

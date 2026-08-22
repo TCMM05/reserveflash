@@ -2,6 +2,20 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/).
 
+## [0.3.21] - R2 - déclenchement au retour réseau validé en conditions réelles - 2026-08-22
+
+Après le correctif `[0.3.20]` (rafraîchissement UI manquant, trouvé avant
+tout retest), test terrain confirmé : réseau coupé avant la capture de la
+photo "Étiquette / référence" (item resté `pending`), photo prise, réseau
+rétabli sans fermer l'app entre-temps, résultat conforme - le champ se
+remplit automatiquement dans "Vérifier les faits", sans action manuelle de
+l'utilisateur après la reconnexion.
+
+**Les deux chantiers de "câblage mobile manquant"** identifiés lors de la
+revue des points restants R2 (`[0.3.17]` déclenchement au retour réseau,
+`[0.3.18]` écran S07) **sont désormais entièrement câblés ET validés en
+conditions réelles.**
+
 ## [0.3.20] - R2 - correctif : retour réseau n'avertissait jamais l'UI - 2026-08-22
 
 Trouvé en préparant le test terrain du retour réseau (`[0.3.17]`), AVANT
