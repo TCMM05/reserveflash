@@ -70,11 +70,17 @@ alembic/            Migrations (section 5.1 - "aucune migration manuelle
 
 Sélection via variables d'environnement (`.env`, voir `.env.example`) :
 
-| Variable | Valeurs R0 | Notes |
+| Variable | Valeurs | Notes |
 |---|---|---|
-| `RESERVEFLASH_AI_PROVIDER` | `mock` | `openai` lève `NotImplementedError` (R2). |
+| `RESERVEFLASH_AI_PROVIDER` | `mock` (défaut) / `openai` | `openai` implémenté depuis R2 (`app/infrastructure/ai/openai_provider.py`) - requiert `RESERVEFLASH_OPENAI_API_KEY`. |
 | `RESERVEFLASH_STORAGE_PROVIDER` | `mock` | `s3_compatible`/`supabase` non implémentés (R4). |
 | `RESERVEFLASH_AUTH_PROVIDER` | `mock` | `supabase` non implémenté (R4). |
 
 Le mode `mock` ne nécessite AUCUNE clé et fait tourner l'intégralité du
 parcours F01-F13 (voir `tests/api/test_incidents_flow.py`).
+
+Point 12 (gouvernance coût/tokens IA, `docs/GATE_R2_STATUS.md`) : disjoncteur
+de budget optionnel, désactivé par défaut, via `RESERVEFLASH_AI_DAILY_BUDGET_USD`
+(ex: `RESERVEFLASH_AI_DAILY_BUDGET_USD=5.0`) - voir
+`app/infrastructure/ai/budget_guard.py` pour les limitations assumées
+(compteur en mémoire process, remis à zéro au redémarrage).
